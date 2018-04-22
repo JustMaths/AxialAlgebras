@@ -1,0 +1,588 @@
+/*
+
+========================== SHAPES =============================
+
+*/
+/*
+
+A function for sorting the shapes
+
+*/
+ShapeSort := func<x,y | x[1] gt y[1] select -1 else x[1] lt y[1] select 1 else x[2] gt y[2] select 1 else x[2] lt y[2] select -1 else 0>;
+//
+// ================= FINDING THE SHAPE ===================
+//
+/*
+
+Given a permutation group, determines all the shapes of Axial algebras which are possible where we assume the axes are in bijection with a union of conjugacy classes
+
+*/
+intrinsic Shapes(G::GrpPerm) -> SeqEnum
+  {
+  Returns the shapes which coorespond to the action of G on a union of conjugacy classes of involutions.
+  }
+  all_shapes := [];
+  Axs := InvolutionGSets(G);
+  for Ax in Axs do
+    taus := AdmissibleTauMaps(Ax);
+    for tauset in taus do
+      tau, stab := Explode(tauset);
+      all_shapes cat:= Shapes(Ax, tau, stab);
+    end for;
+  end for;
+
+  return all_shapes;
+end intrinsic;
+/*
+
+Returns the GSets which are got in the old way.
+
+*/
+intrinsic InvolutionGSets(G::GrpPerm) -> SeqEnum
+  {
+  Returns a sequence of GSets which correspond to the action of G on a union of conjugacy classes of involutions.  We dedupe this for the action of the outer automorphism group of G.
+  }
+  class2 := {@ c[3] : c in Classes(G) | c[1] eq 2 @};
+
+  orbs := {@ Orbit(G,x) : x in class2 @};
+  // Two sets of involutions which are conjugate under an outer automorphism will produce the same posibilities for the shape.
+ 
+  aut := AutomorphismGroup(G);
+  autFP, FPmap := FPGroup(aut);
+  out, out_map := OuterFPGroup(aut);
+  outPerm, perm_map := PermutationGroup(out);
+
+  elts_out := [ g@@perm_map@@out_map@FPmap : g in outPerm ];
+  
+  // We need to dedupe the set of all possible subsets of orbs for those which are conjugate under the outer automorphisms
+  // At the same time, we check for generation of G
+  
+  all_invs := {@ @};
+  for invs in {@ IndexedSet(x) : x in Subsets(Set(orbs)) | x ne {} @} do
+    if sub<G | &join invs > ne G then
+      continue;
+    end if;
+    if not exists(t){ f : f in elts_out | {@ GSet(G, o@f) : o in invs @} in all_invs } then
+      Include(~all_invs, invs);
+    end if;
+  end for;
+
+  all_GSets := [];
+  for invs in all_invs do
+    idems := &join invs;
+
+    Ax := IndexedSet([1..#idems]);
+    tau := map<Ax -> G | i :-> idems[i]>;
+    AxxG := CartesianProduct(Ax, G);
+    f := map< AxxG -> Ax | y :-> Position(idems,((y[1] @ tau)^y[2]))>;
+    Ax := GSet(G, Ax, f);
+    if IsTrivial(ActionKernel(G,Ax)) then
+      Include(~all_GSets, Ax);
+    end if;
+  end for;
+  
+  return Sort(all_GSets, func< x,y| #x-#y>);
+end intrinsic;
+/*
+
+Is a tau map admissible?  This may not be true when we restrict to a suborbit...
+
+*/
+intrinsic IsAdmissibleTauMap(Ax::GSet, tau::Map) -> BoolElt
+  {
+  returns whether a tau-map is admissible or not.
+  }
+  G := Group(Ax);
+  orbs := Orbits(G, Ax);
+  
+  // We require tau to be a tau map
+  if not sub<G| Image(tau)> eq G or
+    not forall{ o : o in orbs | (o[1]@tau)^2 eq G!1 and o[1]@tau in Stabiliser(G, Ax, o[1])}
+    or
+    not forall{<i,g> : i in Ax, g in FewGenerators(G) | (i@tau)^g eq Image(g, Ax, i)@tau}
+    then
+    return false;
+  end if;
+  
+  // Check if tau is admissible.
+  // That is, for a pair a,b, |a^D| = |b^D| and other size properties
+  pairs_orbs := Orbits(G, GSet(G,Ax,{ {@i,j@} : j in [i+1..#Ax], i in [1..#Ax]}));
+  pairs_orb_reps := [ Representative(o) : o in pairs_orbs];
+  
+  for pair in pairs_orb_reps do
+    D := sub<G | pair[1]@tau, pair[2]@tau>;
+    o1 := Orbit(D, Ax, pair[1]);
+    o2 := Orbit(D, Ax, pair[2]);
+    if #o1 ne #o2 then
+      return false;
+    elif o1 eq o2 then
+      if #o1 notin {3,5} then
+        return false;
+      end if;
+    else
+      if #o1 notin {1,2,3} then
+        return false;
+      end if;
+    end if;
+  end for;
+  
+  return true;
+end intrinsic;
+/*
+
+Given a GSet Ax, returns the admissible tau maps together with their stabilisers.
+
+*/
+intrinsic AdmissibleTauMaps(Ax::GSet) -> SeqEnum
+  {
+  Given a GSet Ax, we find all the admissible tau maps up to automorphisms of the action.
+  }
+  G := Group(Ax);
+  orbs := Orbits(G, Ax);
+
+  orb_reps := [Representative(o) : o in orbs];
+  possibles := [ #orbs[i] eq 1 select {@ Identity(G) @} 
+        else {@ g : g in Centre(Stabiliser(G, Ax, orb_reps[i])) | Order(g) eq 2 @}
+                   : i in [1..#orbs ]];
+  
+  cart := [ c : c in CartesianProduct(possibles)];
+  
+  tau_maps := {@ @};
+  pairs_orbs := Orbits(G, GSet(G,Ax,{ {@i,j@} : j in [i+1..#Ax], i in [1..#Ax]}));
+  pairs_orb_reps := [ Representative(o) : o in pairs_orbs];
+  
+  for poss in CartesianProduct(possibles) do
+    def := &cat[ [ <j,poss[i]^g> where _,g := IsConjugate(G, Ax, orb_reps[i], j) : j in orbs[i]] : i in [1..#orbs]];
+    Sort(~def, func<x,y|x[1]-y[1]>);
+    def := [def[i,2] : i in [1..#def]];
+    tau := map< Ax -> G | i:-> def[i]>;
+  
+    // We verify it is admissible
+    for pair in pairs_orb_reps do
+      D := sub<G | pair[1]@tau, pair[2]@tau>;
+      o1 := Orbit(D, Ax, pair[1]);
+      o2 := Orbit(D, Ax, pair[2]);
+      if #o1 ne #o2 then
+        continue poss;
+      elif o1 eq o2 then
+        if #o1 notin {3,5} then
+          continue poss;
+        end if;
+      else
+        if #o1 notin {1,2,3} then
+          continue poss;
+        end if;
+      end if;
+    end for;
+
+    if sub<G | Image(tau)> ne G then
+      continue poss;
+    end if;
+    
+    Include(~tau_maps, tau);
+  end for;
+  
+  if #tau_maps eq 0 then
+    return [];
+  end if;
+  
+  // We now wish to dedupe the set of tau maps using the automorphisms of Ax
+  
+  phi, GG := Action(G, Ax);
+  GAx := Stabiliser(Sym(#Ax), Set(orbs));
+  N := Normaliser(GAx, GG);
+  // N is the automorphism group of the action of G on Ax
+  
+  // We must define equality of maps
+  
+  MapEq := function(f,g)
+    return forall{i: i in orb_reps | i@f eq i@g};
+  end function;
+  
+  tau_return := function(f)
+    assert exists(g){g : g in tau_maps | MapEq(f,g)};
+    return g;
+  end function;
+  
+  // The action on tau maps is
+  // tau_n := tau(i^(n^-1))^n
+  
+  tausxN := CartesianProduct(tau_maps, N);
+  f := map< tausxN -> tau_maps | y :-> tau_return(map<Ax-> G | i:-> ((((i^(y[2]^-1))@y[1])@phi)^y[2])@@phi >) >;
+  Taus := GSet(N, tau_maps, f);
+  
+  return [ <tau, Stabiliser(N, Taus, tau)> : tau in [ o[1] : o in Orbits(N, Taus)]];
+end intrinsic;
+/*
+
+Given a GSet Ax and an admissible tau map, return the shapes of possible algebras, deduped by the action of stab.
+
+*/
+FindMinRep := function(orb, L, num)
+  assert exists(l){ l : l in L | exists{ o : o in orb | o[1] eq l}};
+  lorb := {@ x : x in orb | x[1] eq l @};
+  assert exists(pair){ x : i in L cat [ i : i in [1..num] | i notin L] |
+                     exists(x){x : x in lorb | x[2] eq i}};
+  return pair;
+end function;
+
+intrinsic Shapes(Ax::GSet, tau::Map, stab::GrpPerm) -> SeqEnum
+  {
+  Given a GSet Ax and a tau map, we find all the possible shapes of algebra.
+  }
+  G := Group(Ax);
+  
+  orbs := Orbits(G, Ax);
+  orb_reps := [o[1] : o in orbs];
+  // We find the orbit representatives on pairs and so the possible 2-gen subalgebras
+  pairs_orb_reps := [ FindMinRep(o, orb_reps, #Ax) : o in Orbits(ActionImage(G, GSet(G,Ax,{ {@i,j@} : j in [i+1..#Ax], i in [1..#Ax]})))];
+  
+  // We assume throughout that the first two elements in the set generate the algebra.
+  // NB by using a seq instead a set here for the list of subalgebras, we are allowing the same set of axes to define different dihedral subalgebras (although they must be of the same type).  eg, for 5A we do not assume that the extra basis element is the same for differnt pairs of generating axes.
+  
+  subalgs := [ &join{@ {@ Image(rho^k, Ax, o[1]), Image(rho^k, Ax, o[2] ) @} : k in [0..Order(rho)-1] @} where rho := (o[1]@tau)*(o[2]@tau): o in pairs_orb_reps ];
+  Sort(~subalgs, func<x,y|#y-#x>); // Sort largest first
+  
+  // We do not get free choice over all the 2-gen subalgebras.  Some are contained in some others.
+  // Formally, there is a graph with vertices being the subalgs and edges given by domination, where one subalgebra is contained in another.  We find the connected components.
+  
+  defining_shapes := [];
+  for t in subalgs do
+    involved := [ i : i in [1..#defining_shapes] | 
+          exists{ sh : sh in defining_shapes[i] |
+          exists{ j : j in [1..#sh[2]] |
+               t subset sh[2,j] or sh[2,j] subset t }}];
+    if #involved eq 0 then
+      Append(~defining_shapes, [ < t, Orbit(G, Ax, t) > ]);
+    else
+      // We must merge all the shapes which are involved with the new one.
+      defining_shapes[involved[1]] cat:= &cat [ defining_shapes[i] : i in involved[2..#involved] ] cat [ < t, Orbit(G, Ax, t) > ];
+      for i in Reverse(involved)[1..#involved-1] do
+        Remove(~defining_shapes, i);
+      end for;
+    end if;
+  end for;
+
+  defining_shape_reps := [ Sort([ t[1] : t in sets ], func<x,y|#y-#x>) : sets in defining_shapes ];
+  
+  // Now we need to pick the possible choices for each connected component
+
+  // If the subalgebra has 5, or 6 axes, there is no choice and it is 5A, or 6A
+  shape := [];
+  while #defining_shape_reps ne 0 and #defining_shape_reps[1,1] ge 5 do
+    for o in defining_shape_reps[1] do
+      if #o eq 6 then 
+        Append(~shape, < o, "6A" >);
+      elif #o eq 5 then
+        Append(~shape, < o, "5A" >);
+      end if;
+    end for;
+    Remove(~defining_shape_reps, 1);
+    Remove(~defining_shapes, 1);    
+  end while;
+    
+  // Check whether there are any subalgebras left to define.
+  if #defining_shape_reps eq 0 then
+    return [ [*Ax, tau, shape*] ];
+  end if;
+
+  // There is choice over the remaining subalgebras: these are either length 2, 3, or 4
+  // There are two choices for each
+
+  // We wish to define an action of stab on the remaining defining_shapes
+  
+  def_shapes_orbs := [&join { t[2] : t in set} : set in defining_shapes];
+
+  EltInOrb := function(x)
+    assert exists(i){ i : i in [1..#def_shapes_orbs] | x in def_shapes_orbs[i]};
+    return i;
+  end function;
+
+  num_shapes := IndexedSet([1..#defining_shapes]);
+  numxstab := CartesianProduct(num_shapes, stab);
+  stabact := map< numxstab -> num_shapes | y:-> EltInOrb(defining_shape_reps[y[1],1]^y[2])>;
+  num_shapes := GSet(stab, num_shapes, stabact);
+
+  H := ActionImage(stab, num_shapes);
+
+  // We use this to act on our binary choices
+  sortfn := function(x,y);
+    if exists(i){i : i in [1..Degree(x)] | x[i] ne y[i]} then
+      if x[i] eq 0 then
+        return -1;
+      else
+        return 1;
+      end if;
+    end if;
+    return 0;
+  end function;
+  
+  binary_choices := Sort({@ v : v in VectorSpace(GF(2), #defining_shapes) @}, sortfn);
+  bin_reps := Sort([ o[1] : o in Orbits(H, GSet(H, binary_choices))], sortfn);
+
+  shapes := [];
+  for b in bin_reps do
+    extra := &cat[ [ < defining_shape_reps[i,j], IntegerToString(#defining_shape_reps[i,j]) cat (b[i] eq 0 select "A" else "B") > : j in [1..#defining_shape_reps[i]] | #defining_shape_reps[i,j] eq #defining_shape_reps[i,1] ] : i in [1..Degree(b)]];
+    // correct for 3B to 3C
+    extra := [ x[2] eq "3B" select < x[1], "3C" > else x : x in extra];
+    Append(~shapes, [*Ax, tau, shape cat extra *]);
+  end for;
+
+  return shapes;
+end intrinsic;
+/*
+
+Checks isomorphism of shapes.
+
+*/
+intrinsic IsIsomorphic(Ax1::GSet, tau1::Map, shape1::SeqEnum, Ax2::GSet, tau2::Map, shape2::SeqEnum) -> BoolElt, GrpPermElt, Map
+  {
+  Tests if the shape defined by Ax1, tau1, and shape1 is isomorphic to the one defined by Ax2, tau2, shape2.  If so, it returns a pair, perm in Sym(|Ax1|) and homg:G1->G2 such that
+  
+  (i^g)^perm = (i^perm)^(g@homg) for all g in G1.
+  
+  i:->  i^(perm)^-1 @tau2^perm = tau2
+  
+  and perm maps shape1 to shape2.
+  }
+  if #Ax1 ne #Ax2 then
+    return false, _, _, _;
+  end if;
+  
+  // Find the equivalence between the GSets
+  G1 := Group(Ax1);
+  G2 := Group(Ax2);
+  act1, GG1 := Action(G1, Ax1);
+  act2, GG2 := Action(G2, Ax2);
+  so, perm := IsConjugate(Sym(#Ax1), GG1, GG2);
+  if not so then
+    return false, _, _, _;
+  end if;
+  homg := hom<G1 -> G2 | [<g,((g@act1)^perm)@@act2> : g in Generators(G1)]>;
+  assert forall{<i,g> : i in Ax1, g in Generators(G1) | Image(g,Ax1,i)^perm eq Image(g@homg, Ax2, i^perm)};
+  
+  // We form the tau map for the conjugated Ax1
+  tau_adj := map<Ax2 -> G2 | i:->(i^(perm^-1))@tau1@homg>;
+  
+  // Find the equivalence between the tau maps
+  GAx2 := Stabiliser(Sym(#Ax2), Set(Orbits(G2, Ax2)));
+  N := Normaliser(GAx2, GG2);
+
+  // We must define equality of maps
+  orb_reps := {@ o[1] : o in Orbits(G2, Ax2)@};
+  MapEq := function(f,g)
+    return forall{i: i in orb_reps | i@f eq i@g};
+  end function;
+    
+  // The action on tau maps is
+  // tau_n := tau(i^(n^-1))^n
+  
+  so := exists(n){n : n in N | MapEq(tau2, map<Ax2 -> G2 |
+                        i:-> (((i^(n^-1))@tau_adj@act2)^n)@@act2>)};
+  
+  if not so then
+    return false, _, _, _;
+  end if;
+  
+  perm := perm*n;
+  homg := hom<G1 -> G2 | [<g,((g@act1)^perm)@@act2> : g in Generators(G1)]>;
+  assert MapEq(tau2, map<Ax2 -> G2 | i:->(i^(perm^-1))@tau1@homg>);
+  
+  // Now we check to see if the shapes are the same
+  
+  // we can act with all the stabiliser of the tau-map
+  stab := sub<N |{m : m in N | MapEq(tau2, map<Ax2 -> G2 |
+                        i:-> (((i^(m^-1))@tau2@act2)^m)@@act2>)}>;
+  shape_orbs2 := [ Orbit(G2, Ax2, sh[1]) : sh in shape2 ];
+  
+  orbmember := function(S);
+    assert exists(i){i : i in [1..#shape_orbs2] | S in shape_orbs2[i]};
+    return i;
+  end function;
+  
+  so := exists(h){h : h in stab | forall{sh : sh in shape1 | sh[2] eq shape2[orbmember(sh[1]^(perm*h)), 2] }};
+  if not so then
+    return false, _, _, _;
+  end if;
+  
+  perm := perm*h;
+  homg := hom<G1 -> G2 | [<g,((g@act1)^perm)@@act2> : g in Generators(G1)]>;
+  assert MapEq(tau2, map<Ax2 -> G2 | i:->(i^(perm^-1))@tau1@homg>);
+    
+  return true, perm, homg;
+end intrinsic;
+/*
+
+Function to return the restriction of the shape to the set of axes given by axes
+
+*/
+intrinsic RestrictShape(Ax::GSet, tau::Map, shape::SeqEnum, axes::SetIndx) -> SeqEnum, SeqEnum
+  {
+  Given a shape type defined by Ax, tau and shape, and a set of axes, calculate the restriction of the shape to the set of axes.  Returns the type and the sequence of types seen from the original shape.
+  }
+  G := Group(Ax);
+  
+  full_type := [];  // records the full shape information
+  type_flag := [];  // records the index of which types were seen
+
+  for i in [1..#shape] do
+    sh := shape[i];
+    if exists(g){ g : g in G | Image(g, Ax, sh[1]) subset axes} then
+      Append(~full_type, < Image(g, Ax, sh[1]), sh[2]>);
+      Append(~type_flag, i);
+    end if;
+    // A 6A, 4A, 4B could also intersect in a smaller subalgebra
+    // (even if a conjugate copy intersected fully)
+    if sh[2] eq "6A" then
+      if exists(g){ g : g in G | #(Image(g, Ax, sh[1]) meet axes) eq 3} then
+        Append(~full_type, <Image(g, Ax, sh[1]) meet axes, "3A">);
+      elif exists(g){ g : g in G | #(Image(g, Ax, sh[1]) meet axes) eq 2} then
+        Append(~full_type, <Image(g, Ax, sh[1]) meet axes, "2A">);
+      end if;
+    elif sh[2] eq "4A" and exists(g){ g : g in G | #(Image(g, Ax, sh[1]) meet axes) eq 2} then
+      Append(~full_type, <Image(g, Ax, sh[1]) meet axes, "2B">);
+    elif sh[2] eq "4B" and exists(g){ g : g in G | #(Image(g, Ax, sh[1]) meet axes) eq 2} then
+      Append(~full_type, <Image(g, Ax, sh[1]) meet axes, "2A">);
+    end if;
+  end for;
+  Sort(~full_type, func<x,y | ShapeSort(x[2],y[2])>);
+  
+  return full_type, type_flag;
+end intrinsic;
+/*
+
+Find all the helpful subalgebras we could glue in by checking maximal subgroups.  Has a switch so to check if we have computed them and if so returns the gluing information.
+
+*/
+intrinsic MaximalGluingSubalgebras(field::Fld, Ax::GSet, tau::Map, shape::SeqEnum: gluing:= false, partial:=false) -> List, SeqEnum
+  {
+  This routine has two functions:
+
+  If gluing = false (default), then given a field and the information for a axial algebra, it returns which maximal subalgebras would be used to glue in.
+  
+  If gluing = true, then it returns a list of tuples <filename, map, homg> for subalgebras which have already been computed.  Here, if axes are the set of axes in Ax for a subalgebra, whose generated by the tau map is K, then map is a map from axes to the axes of the subalgebra and homg is an isomorphism from K to Group(subalgebra).
+  
+  The function also returns a set of flags showing which shapes have been covered by the subalgebras.
+  }
+  G := Group(Ax);
+  groups := ls(Sprintf("library/%m", field));
+  maxes := [G] cat [ rec`subgroup : rec in MaximalSubgroups(G)];
+  
+  maxsubalgs := [* *];
+  
+  shape_flags := [ false : sh in shape ];
+  
+  for max in maxes do
+    orbs := [ o : o in Orbits(max, Ax) | sub<G | o@tau> subset max];
+    subsets := [ S : S in Subsets({1..#orbs}) | S ne {}];
+    Sort(~subsets, func<x,y|#y-#x>);
+    if max eq G then
+      Remove(~subsets, 1);
+    end if;
+        
+    // We loop over all subsets.
+    // if gluing = false, then just consider the maximal subset and return what the group and shape is for that
+    // if gluing = true, then check to see whether it has been computed and if not descend to find computed algebras to glue in.  Dedupe by containment.
+    
+    while #subsets ne 0 do
+      set := subsets[1];
+      axes := &join orbs[Setseq(set)];
+      K := sub<G | FewGenerators(sub<G | axes@tau>)>;
+      
+      num := IndexedSet([1..#axes]);
+      numxK := CartesianProduct(num, K);
+      f := map<numxK -> num | y:-> Position(axes, Image(y[2], Ax, axes[y[1]]))>;
+      Kx := GSet(K, num, f);
+      
+      if IsTrivial(K) then
+        Remove(~subsets, 1);
+        continue;
+      end if;
+      
+      // Try to find a faithful action of a subgroup
+      // write this!!
+      ker := ActionKernel(K, Kx);
+      if IsTrivial(K) or (not IsTrivial(ker)) then
+        Remove(~subsets, 1);
+        continue;
+      end if;
+      
+      Ktau := map<Kx -> K | i:-> axes[i]@tau>;
+      // I don't think this can happen!!
+      if not IsAdmissibleTauMap(Kx, Ktau) then
+        print "tau not addmissible.";
+        Remove(~subsets, 1);
+        continue;
+      end if;
+      
+      Kshape, flag := RestrictShape(Ax, tau, shape, axes);
+      Kshape := [ <{@ Position(axes, i) : i in t[1] @}, t[2]> : t in Kshape ];
+      
+      if not gluing then
+        // We find the GSet, tau and shape for the maximal object only
+        subsets := [ S : S in subsets |  not S subset set ];
+        Append(~maxsubalgs, <Kx, Ktau, Kshape>);
+        
+        for i in flag do
+          shape_flags[i] := true;
+        end for;
+        continue;
+      else
+        // We wish to search for any subalgebras and check whether we have completed them
+        num_axes := &cat [ Sprintf("%o+", #o) : o in orbs[Setseq(set)]];
+        num_axes := num_axes[1..#num_axes-1];
+        
+        path := Sprintf("library/%m/%o/%o", field, MyGroupName(max), num_axes);
+        if not ExistsPath(path) then
+          Remove(~subsets, 1);
+          continue;
+        end if;
+        algs := ls(path);
+        
+        // We remove partial algebras from the list
+        if not partial then
+          algs := [ alg : alg in algs | "partial" notin alg];
+        end if;
+        
+        // We search for possible isomorphic algebras by checking the shape
+        alg_shapes := [ ParseShape(sh) : sh in algs];
+        shape_type := ParseShape(&cat[t[2] : t in Kshape]);
+        possibles := {@ i : i in [1..#alg_shapes] | alg_shapes[i] eq shape_type @};
+        
+        if #possibles eq 0 then
+          Remove(~subsets, 1);
+          continue;
+        end if;
+        
+        so := false;
+        index := 1;
+        while not so and index le #possibles do
+          j := possibles[index];
+          alg_type := GetTypePartialAxialAlgebra(Sprintf("%o/%o", path, algs[j]));
+          _, alg_ax, alg_tau, alg_shape := Explode(alg_type);
+          
+          so, perm, homg, _ := IsIsomorphic(Kx, Ktau, Kshape, alg_ax, alg_tau, alg_shape);
+          index +:= 1;
+        end while;
+        
+        // There is no match
+        if not so then
+          Remove(~subsets, 1);
+          continue;
+        end if;
+        
+        // We have found a match
+        // Have to do it this slightly awkward way so the continue statement works...
+        map := map< axes -> alg_ax | i :-> Position(axes, i)^perm>;
+        Append(~maxsubalgs, <Sprintf("%o/%o", path, algs[j]), map, homg>);
+        subsets := [ S : S in subsets | not S subset set ];
+        
+        for i in flag do
+          shape_flags[i] := true;
+        end for;
+      end if;
+    end while;
+  end for;
+
+  return maxsubalgs, shape_flags;
+end intrinsic;
