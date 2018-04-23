@@ -17,13 +17,16 @@ intrinsic SearchPartialExpansions(A::ParAxlAlg) -> ParAxlAlg
   Vmod := sub<Wmod | [Wmod | v : v in Basis(V)]>;
   Cmod := Complement(Wmod, Vmod: ip:=ip);
 
-  time mods := IndecomposableSummands(Cmod);
+  tt := Cputime();
+  vprint ParAxlAlg, 4: "Finding indecomposable summands to partially expand by.";
+  mods := IndecomposableSummands(Cmod);
+  vprintf ParAxlAlg, 4: "Time taken: %o", Cputime(tt);
 
   // loop over the modules in mods adding one at a time and pulling back any relations or eigenvectors
   
   for U in mods do
     print U;
-    time Apar, phi := PartialExpandSpace(A, sub<A`W| [A`W!A`Wmod!u : u in Basis(U)]>);
+    Apar, phi := PartialExpandSpace(A, sub<A`W| [A`W!A`Wmod!u : u in Basis(U)]>);
 
     IndentPush(2);
     Apar := ExpandEven(Apar: implement := false);
@@ -90,13 +93,14 @@ intrinsic PartialExpandSpace(A::ParAxlAlg, U::ModTupFld) -> ParAxlAlg, Map
   
   require not U subset (sub<W|A`rels> + V): "There is nothing to expand by.";
   
+  vprint ParAxlAlg, 2: "  Partially expanding.";
   // ensure that U is G-invariant
   U := GInvariantSubspace(Wmod, W, {@ W!u : u in Basis(U)@});
   
   ip := GetInnerProduct(Wmod);
   decompU := DecomposeVectorsWithInnerProduct(V, {@ W!u : u in Basis(U)@}: ip:=ip);
   
-  //Now we may extend by the subspace spanned by the projection to the complement
+  //Now we may extend by the subspace X spanned by the projection to the complement
   
   X := sub<W| [t[2] : t in decompU]>;
   
@@ -113,6 +117,8 @@ intrinsic PartialExpandSpace(A::ParAxlAlg, U::ModTupFld) -> ParAxlAlg, Map
   Wnew := RSpace(BaseField(A), Dimension(Wmodnew));
   X := RSpaceWithBasis([ W | Wmod!(Xmod.i) : i in [1..Dimension(Xmod)]]);
   VX := V+X;
+  
+  // So VX is the subspace where we will know the products
   
   WtoWnew_mat := MapToMatrix(injs[3]);
   WtoWnew := hom< W -> Wnew | WtoWnew_mat >;
@@ -144,6 +150,9 @@ intrinsic PartialExpandSpace(A::ParAxlAlg, U::ModTupFld) -> ParAxlAlg, Map
   VxXtoWnew_mat := MapToMatrix(injs[2]);
   
   X2mult := [ [Wnew.ijpos(i,j,dimX) : j in [1..dimX]]: i in [1..dimX]];
+  
+  // ===== Now define two functions ======
+  
   
   // Function which multiplies L with L
   function BulkMultiplyAtoAnewSym(L)
@@ -195,6 +204,9 @@ intrinsic PartialExpandSpace(A::ParAxlAlg, U::ModTupFld) -> ParAxlAlg, Map
       
     return ans;
   end function;
+  
+  // ===== Return to intrinsic ======
+  
 
   Anew`mult := BulkMultiplyAtoAnewSym(Basis(VX));
   vprintf ParAxlAlg, 4: "  Time taken to build the multiplication table %o.\n", Cputime(tt);
@@ -249,6 +261,8 @@ intrinsic PartialExpandSpace(A::ParAxlAlg, U::ModTupFld) -> ParAxlAlg, Map
   end for;
   vprintf ParAxlAlg, 4: "  Time taken for the odd and even parts %o.\n", Cputime(tt);
 
+
+
   // We update the subalgs
   vprint ParAxlAlg, 2: "  Updating the subalgebras.";
   tt := Cputime();
@@ -265,99 +279,41 @@ intrinsic PartialExpandSpace(A::ParAxlAlg, U::ModTupFld) -> ParAxlAlg, Map
     subspV := subsp meet V;
     
     bas := ExtendBasis(subspV, subspVX);
+    bas_all := ExtendBasis(subspVX, subsp);
     bas_subspV := bas[1..Dimension(subspV)];
-    bas_subspVX := bas[Dimension(subspV)+1..Dimension(subspVX)];
+    bas_subspX := bas[Dimension(subspV)+1..Dimension(subspVX)];
+    bas_extra := bas_all[Dimension(subspVX)+1..Dimension(subsp)];
+    bas := bas_subspV cat bas_subspX cat bas_extra;
     
-    prodsVX := [[ Wnew |(Anew!v@WtoWnew * Anew!u@WtoWnew)`elt : v in bas_subspV] : u in bas_subspVX];
-    prodsX2 := [[ Wnew |(Anew!bas_subspVX[k]@WtoWnew * Anew!bas_subspVX[l]@WtoWnew)`elt : k in [1..l]] : l in [1..#bas_subspVX]];
-    newsubsp := subsp@WtoWnew + sub< Wnew | &cat prodsVX cat &cat prodsX2>;
+    // We also calculate their images in Wnew
+    basnew := FastMatrix(bas, WtoWnew_mat);
+    basnewV := basnew[1..Dimension(subspV)];
+    basnewX := basnew[Dimension(subspV)+1..Dimension(subspVX)];
     
-    newmap := hom<newsubsp -> alg`W | [ <u@WtoWnew, u@map> : u in Basis(subsp)] cat
-       [ <prodsVX[l,k], (alg!bas_subspV[k]@map * alg!bas_subspVX[l]@map)`elt> : k in [1..#bas_subspV], l in [1..#bas_subspVX]] cat [ <prodsX2[l,k], (alg!bas_subspVX[k]@map * alg!bas_subspVX[l]@map)`elt> : k in [1..l], l in [1..#bas_subspVX]]>;
+    prodsVxX := BulkMultiply(Anew, basnewV, basnewX);
+    // [[ Wnew |(Anew!v@WtoWnew * Anew!u@WtoWnew)`elt : v in bas_subspV] : u in bas_subspVX];
+    prodsX2 := BulkMultiply(Anew, basnewX);
+    // [[ Wnew |(Anew!bas_subspVX[k]@WtoWnew * Anew!bas_subspVX[l]@WtoWnew)`elt : k in [1..l]] : l in [1..#bas_subspVX]];
+    newsubsp := subsp@WtoWnew + sub< Wnew | &cat prodsVxX cat prodsX2>;
+    
+    newmap := hom<newsubsp -> alg`W | [ <basnew[i], bas[i]@map> : i in [1..#bas]]
+     cat [ <prodsVxX[k,l], (alg!bas_subspV[k]@map * alg!bas_subspX[l]@map)`elt>
+             : k in [1..#bas_subspV], l in [1..#bas_subspX]]
+     cat [ <prodsX2[l*(l-1) div 2 + k], (alg!bas_subspX[k]@map * alg!bas_subspX[l]@map)`elt>
+             : k in [1..l], l in [1..#bas_subspX]]>;
+
+//    newmap := hom<newsubsp -> alg`W | [ <u@WtoWnew, u@map> : u in Basis(subsp)]
+//         cat [ <prodsVX[l,k], (alg!bas_subspV[k]@map * alg!bas_subspVX[l]@map)`elt>
+//                 : k in [1..#bas_subspV], l in [1..#bas_subspVX]]
+//         cat [ <prodsX2[l,k], (alg!bas_subspVX[k]@map * alg!bas_subspVX[l]@map)`elt>
+//                 : k in [1..l], l in [1..#bas_subspVX]]>;
     
     Include(~subalgs`subsps, newsubsp);
     Append(~subalgs`maps, <newmap, homg, pos>);
-    
-    // If we have updated our map, we want to pull back the eigenvectors.
-    if #bas_subspVX ne 0 then
-      Im_sp := Image(newmap);
-      Im_old := Image(map);
-      
-      // NB Im_sp is a H-submodule of alg, where H = Group(alg).  If an axis id of A is conjugate to an axis of alg by g, then the double coset KgH, where K = Stab(id) are all the elements which conjugate id to an axis of alg (of a given type). There could be additional outer automorphisms of alg induced by G, but we would see these in A and they would just fuse classes of axes in alg.  So, we need only find a single g to conjugate the eigenspaces.
-      
-      if not assigned axes then
-        axes := [ Position(Image(Anew`GSet_to_axes), Anew`axes[j]`id`elt) : j in [1..#Anew`axes]];
-      end if;
-      
-      alg_axes := [ Position(Image(Anew`GSet_to_axes), alg`axes[j]`id`elt@@newmap) : j in [1..#alg`axes]];
-      
-      // S is a set of tuples <j,k,g>, where the jth axis of Anew conjugates via g to the k^th axis of alg
-      S := {@ <j,k,g> : j in [1..#Anew`axes], k in [1..#alg`axes] | so
-                where so, g := IsConjugate(G, Anew`GSet, axes[j], alg_axes[k]) @};
-                
-      // Precompute the pullback matrix from Im_sp to Wnew
-      time pullback_mat := Matrix([Im_sp.l@@newmap : l in [1..Dimension(Im_sp)]]);
-      
-      for s in S do
-        j,k,g := Explode(s);
-        
-        // gather together all the eigenvectors needed and precompute the maps required
-        // We only need to do those which are in Im_sp, but not Im_old
-        // This minimises on the work
-        
-        ttt := Cputime();
-        allkeys := AssociativeArray();
-        allkeys["even"] := [{@ @}, {@ 1 @}, {@ 0 @}, {@ 1/4 @}, {@ 1, 0 @}, {@ 1, 1/4 @}, {@ 0, 1/4 @}, {@ 1, 0, 1/4 @}];
-        allkeys["odd"] := [{@ 1/32 @}];
-        
-        eigvects := [];
-        dims := AssociativeArray();
-        for attr in ["even", "odd"], key in allkeys[attr] do
-          eig_old := alg`axes[k]``attr[key] meet Im_old;
-          bas := ExtendBasis(eig_old, alg`axes[k]``attr[key] meet Im_sp);
-          dims[key] := #bas - Dimension(eig_old);
-          eigvects cat:= [ Coordinates(Im_sp, v) : v in bas[Dimension(eig_old)+1..#bas]];
-        end for;
-        
-        // We could have no new eigenvectors
-        if #eigvects eq 0 then
-          continue s;
-        end if;
-        
-        // We pull back the vectors to A, apply g^-1
-        if not assigned actionhom then
-            actionhom := GModuleAction(Anew`Wmod);
-        end if;
-        
-        newvects := [Matrix(eigvects)*pullback_mat*((g^-1)@actionhom)];
-        
-        // Im_sp is a Group(alg)-submodule, so for each eigenspace U, U meet Im_sp is an alg`axes[k]`stab submodule.  So the pullback to A is an H= alg`axes[k]`stab@homg module.
-        
-        tttt := Cputime();
-        H := (alg`axes[k]`stab@homg)^(g^-1);
-        Htrans := Transversal(Anew`axes[j]`stab, H);
-        
-        for h in Htrans diff {@ Id(G)@} do
-          Append(~newvects, newvects[1]*(h@actionhom));
-        end for;
-        vprintf ParAxlAlg, 4: "Time for new transversal action part %o\n", Cputime(tttt);
-        
-        offset := 0;
-        for attr in ["even", "odd"] do
-          for key in allkeys[attr] do
-            Anew`axes[j]``attr[key] +:= sub<Wnew | &cat [ newvects[l][offset+1.. offset+dims[key]] : l in [1..#newvects]]>;
-            offset +:= dims[key];
-          end for;
-        end for;
-        
-      end for;
-      // Also collect the relations coming from the multiplication in the subalgs
-      U := GInvariantSubspace(Wmodnew, Wnew, Basis(Kernel(newmap)));
-      
-      Anew`rels join:= {@ Wnew | u : u in Basis(U)@};
-    end if;
   end for;
   Anew`subalgs := subalgs;
+  
+  PullbackEigenvaluesAndRelations(A, ~Anew);
   vprintf ParAxlAlg, 4: "  Time taken for updating the subalgebras %o\n", Cputime(tt);
 
   // We also collect some relations coming from the eigenvectors

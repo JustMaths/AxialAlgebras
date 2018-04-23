@@ -423,13 +423,13 @@ intrinsic RestrictShape(Ax::GSet, tau::Map, shape::SeqEnum, axes::SetIndx) -> Se
   G := Group(Ax);
   
   full_type := [];  // records the full shape information
-  type_flag := [];  // records the index of which types were seen
+  type_flag := [ false : sh in shape];  // records the index of which types were seen
 
   for i in [1..#shape] do
     sh := shape[i];
     if exists(g){ g : g in G | Image(g, Ax, sh[1]) subset axes} then
       Append(~full_type, < Image(g, Ax, sh[1]), sh[2]>);
-      Append(~type_flag, i);
+      type_flag[i] := true;
     end if;
     // A 6A, 4A, 4B could also intersect in a smaller subalgebra
     // (even if a conjugate copy intersected fully)
@@ -494,45 +494,39 @@ intrinsic MaximalGluingSubalgebras(field::Fld, Ax::GSet, tau::Map, shape::SeqEnu
       f := map<numxK -> num | y:-> Position(axes, Image(y[2], Ax, axes[y[1]]))>;
       Kx := GSet(K, num, f);
       
-      if IsTrivial(K) then
-        Remove(~subsets, 1);
-        continue;
-      end if;
-      
-      // Try to find a faithful action of a subgroup
-      // write this!!
-      ker := ActionKernel(K, Kx);
-      if IsTrivial(K) or (not IsTrivial(ker)) then
+      // Find a faithful action of a subgroup, K is a central extension of this.
+      phi, K_faithful := Action(K, Kx);
+      Kx_faithful := GSet(K_faithful, Kx);
+      if IsTrivial(K_faithful) then
         Remove(~subsets, 1);
         continue;
       end if;
       
       Ktau := map<Kx -> K | i:-> axes[i]@tau>;
+      Ktau_faithful := Ktau*phi;
       // I don't think this can happen!!
-      if not IsAdmissibleTauMap(Kx, Ktau) then
+      if not IsAdmissibleTauMap(Kx_faithful, Ktau_faithful) then
         print "tau not addmissible.";
         Remove(~subsets, 1);
         continue;
       end if;
       
-      Kshape, flag := RestrictShape(Ax, tau, shape, axes);
+      Kshape, flags := RestrictShape(Ax, tau, shape, axes);
       Kshape := [ <{@ Position(axes, i) : i in t[1] @}, t[2]> : t in Kshape ];
       
       if not gluing then
         // We find the GSet, tau and shape for the maximal object only
         subsets := [ S : S in subsets |  not S subset set ];
-        Append(~maxsubalgs, <Kx, Ktau, Kshape>);
+        Append(~maxsubalgs, <Kx_faithful, Ktau_faithful, Kshape>);
         
-        for i in flag do
-          shape_flags[i] := true;
-        end for;
+        Or(~shape_flags, flags);
         continue;
       else
         // We wish to search for any subalgebras and check whether we have completed them
         num_axes := &cat [ Sprintf("%o+", #o) : o in orbs[Setseq(set)]];
         num_axes := num_axes[1..#num_axes-1];
         
-        path := Sprintf("library/%m/%o/%o", field, MyGroupName(max), num_axes);
+        path := Sprintf("library/%m/%o/%o", field, MyGroupName(K_faithful), num_axes);
         if not ExistsPath(path) then
           Remove(~subsets, 1);
           continue;
@@ -554,6 +548,7 @@ intrinsic MaximalGluingSubalgebras(field::Fld, Ax::GSet, tau::Map, shape::SeqEnu
           continue;
         end if;
         
+        // Have to do it this slightly awkward way so the continue statement works...
         so := false;
         index := 1;
         while not so and index le #possibles do
@@ -561,7 +556,7 @@ intrinsic MaximalGluingSubalgebras(field::Fld, Ax::GSet, tau::Map, shape::SeqEnu
           alg_type := GetTypePartialAxialAlgebra(Sprintf("%o/%o", path, algs[j]));
           _, alg_ax, alg_tau, alg_shape := Explode(alg_type);
           
-          so, perm, homg, _ := IsIsomorphic(Kx, Ktau, Kshape, alg_ax, alg_tau, alg_shape);
+          so, perm, homg, _ := IsIsomorphic(Kx_faithful, Ktau_faithful, Kshape, alg_ax, alg_tau, alg_shape);
           index +:= 1;
         end while;
         
@@ -572,14 +567,11 @@ intrinsic MaximalGluingSubalgebras(field::Fld, Ax::GSet, tau::Map, shape::SeqEnu
         end if;
         
         // We have found a match
-        // Have to do it this slightly awkward way so the continue statement works...
         map := map< axes -> alg_ax | i :-> Position(axes, i)^perm>;
-        Append(~maxsubalgs, <Sprintf("%o/%o", path, algs[j]), map, homg>);
+        Append(~maxsubalgs, <Sprintf("%o/%o", path, algs[j]), map, phi*homg>);
         subsets := [ S : S in subsets | not S subset set ];
         
-        for i in flag do
-          shape_flags[i] := true;
-        end for;
+        Or(~shape_flags, flags);
       end if;
     end while;
   end for;

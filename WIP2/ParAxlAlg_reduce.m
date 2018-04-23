@@ -111,7 +111,6 @@ intrinsic SaturateSubspace(A::ParAxlAlg, U::ModTupFld: starting := sub<A`W|>) ->
     
     S := IndexedSet(&cat BulkMultiply(A, bas_new, Basis(V)));
     
-    print "    Building quotients";
     ttt := Cputime();
     Q, phi := quo<Wmod | Umod>;
     phimat := Matrix(phi);
@@ -260,11 +259,9 @@ intrinsic ReduceSaturated(A::ParAxlAlg, U::ModTupFld) -> ParAxlAlg, Map
   prods := FastMatrix([ newmult[i,j] : j in [1..i], i in [1..#VV]], psi_mat);
   
   Anew`mult := [ [ Wnew | ] : i in [1..Dimension(Anew`V)]];
-  time for i in [1..Dimension(Anew`V)] do
-    for j in [1..i] do
-      Anew`mult[i,j] := prods[i*(i-1) div 2 +j];
-      Anew`mult[j,i] := Anew`mult[i,j];
-    end for;
+  for i in [1..Dimension(Anew`V)], j in [1..i] do
+    Anew`mult[i,j] := prods[i*(i-1) div 2 +j];
+    Anew`mult[j,i] := Anew`mult[i,j];
   end for;
   vprintf ParAxlAlg, 4: "  Time taken %o\n", Cputime(tt);
   
@@ -874,28 +871,6 @@ intrinsic ApplyUsefulFusionRules(A::ParAxlAlg, i::RngIntElt: previous := Associa
   vprintf ParAxlAlg, 3: "Dimension of subspaces before and after are \n     %o\n and %o. \n", orig[i], CheckEigenspaceDimensions(A: empty := true)[i];
   return A;
 end intrinsic;
-
-intrinsic ApplyGroupTrick(A::ParAxlAlg, i::RngIntElt) -> ParAxlAlg
-  {
-  If w in A_S where 1 in S, then w*h-w in A_\{S -1 \}, where h is in the stabiliser of the corresponding axis.  This routine applies this trick to the largest even subspace for the ith axis.  (The result will be propogated down by taking intersections.)
-  }
-  tt := Cputime();
-  orig := CheckEigenspaceDimensions(A: empty := true);
-  W := A`W;
-  time actionhom := GModuleAction(A`Wmod);
-  Hmat := [ h@actionhom - IdentityMatrix(BaseField(A), Dimension(A)) : h in A`axes[i]`stab | h ne Id(Group(A))];
-  
-  keys := Keys(A`axes[i]`even);
-  max_size := Max([#S : S in keys]);
-  assert exists(S){S : S in keys | #S eq max_size};
-  vprint ParAxlAlg, 2: "  Applying w*h-w trick.";
-  
-  prods := [ FastMatrix({@ w : w in Basis(A`axes[i]`even[S])@}, h) : h in Hmat];
-  A`axes[i]`even[S diff {@1@}] +:= sub< W | &join prods >;
-  vprintf ParAxlAlg, 4: "  Time taken %o\n", Cputime(tt);
-  vprintf ParAxlAlg, 3: "Dimension of subspaces before and after are \n     %o\n and %o. \n", orig[i], CheckEigenspaceDimensions(A: empty := true)[i];
-  return A;
-end intrinsic;
 /*
 
 ====================== REDUCE THE EVEN PART ============================
@@ -951,11 +926,6 @@ intrinsic ExpandEven(A::ParAxlAlg: implement:=true, backtrack := false, reductio
   stage_flag := [[ [ -1 : k in [1..len]] : j in [1..5]] : i in [1..#A`axes]];
   
   // We only wish to do the wh-w trick once per ExpandSubspace, so we do it first
-  /*
-  for i in [1..#A`axes] do
-    A := ApplyGroupTrick(A, i);
-  end for;
-  */
   
   while true do
     // We find the lowest stage so that there is an axis which has changed since we last worked on it.

@@ -86,7 +86,7 @@ intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_tab
     maxsubalgs, flags := MaximalGluingSubalgebras(field, Ax, tau, shape: gluing:=true);
     
     for maxsubalg in maxsubalgs do
-      file, glue, iso := Explode(maxsubalg);
+      file, glue, homg := Explode(maxsubalg);
       alg := LoadPartialAxialAlgebra(file);
 
       // We could be trying to glue in an algebra which has collapsed
@@ -100,15 +100,17 @@ intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_tab
       end if;
         
       axes := Domain(glue);
+      tau_images := [ i@tau : i in axes];
+      H := sub<G | tau_images>;
       
       subsp := RSpaceWithBasis([A`W.i : i in axes]);
 
       map := hom< subsp -> alg`W | [i@glue@alg`GSet_to_axes : i in axes]>;
       
-      homg := hom< Group(alg) -> G | [< g, g@@iso> : g in Generators(Group(alg))]>;
+      homg := hom< H -> Group(alg) | [< g, g@homg> : g in FewGenerators(H)]>;
 
-      assert forall{ <v,g> : v in Basis(subsp), g in Group(alg) |
-                       ((A!v)*(g@homg))`elt @map eq (alg!(v@map)*g)`elt };
+      assert forall{ <v,g> : v in Basis(subsp), g in H |
+                       ((A!v)*(g))`elt @map eq (alg!(v@map)*(g@homg))`elt };
         
       subalgs`subsps join:= {@ subsp @};
       if alg in subalgs`algs then
@@ -156,13 +158,14 @@ intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_tab
     alg_a1 := 2@alg_tau;
 
     // We find the involutions associated to the generating elements of the basic algebra, so we can identify the same rho
-
-    homg := hom< Group(alg) -> G | [<alg_a0, a0>, <alg_a1, a1>]>;
-    assert forall(t){ <g,h> : g,h in Generators(Group(alg)) | (g*h)@homg eq (g@homg)*(h@homg)};
+    
+    D := sub<G | a0, a1>;
+    homg := hom< D -> Group(alg) | [<a0, alg_a0>, <a1, alg_a1>]>;
+    assert forall(t){ <g,h> : g,h in Generators(D) | (g*h)@homg eq (g@homg)*(h@homg)};
 
     alg_rho := alg_a0*alg_a1;
     if a0 ne G!1 and a1 ne G!1 then
-      assert alg_rho eq (a0*a1) @@ homg;
+      assert alg_rho eq (a0*a1) @ homg;
     else
       // There is at least one identity element
       assert type in {"2A", "2B"};
@@ -314,7 +317,6 @@ intrinsic UpdateAxes(A::ParAxlAlg, ~Anew::ParAxlAlg, psi::Map: matrix := Matrix(
   Wnew := Anew`W;
   axes := [];
   offset := 0;
-  tt := Cputime();
   for i in [1..#A`axes] do
     newaxis := New(AxlAxis);
     newaxis`stab := A`axes[i]`stab;
@@ -331,7 +333,6 @@ intrinsic UpdateAxes(A::ParAxlAlg, ~Anew::ParAxlAlg, psi::Map: matrix := Matrix(
     end for;   
     Append(~axes, newaxis);
   end for;
-  printf "Time: %o\n", Cputime(tt);
   Anew`axes := axes;
 end intrinsic;
 /*
@@ -458,14 +459,14 @@ intrinsic PullbackEigenvaluesAndRelations(A::ParAxlAlg, ~Anew::ParAxlAlg: force_
       
       // We pull back the vectors to A, apply g^-1
       if not assigned actionhom then
-          actionhom := GModuleAction(Anew`Wmod);
+        actionhom := GModuleAction(Anew`Wmod);
       end if;
       
       newvects := [Matrix(eigvects)*pullback_mat*((g^-1)@actionhom)];
       
       // Im_sp is a Group(alg)-submodule, so for each eigenspace U, U meet Im_sp is an alg`axes[k]`stab submodule.  So the pullback to A is an alg`axes[k]`stab@homg module.
       
-      H := (alg`axes[k]`stab@homg)^(g^-1);
+      H := (alg`axes[k]`stab@@homg)^(g^-1);
       Htrans := Transversal(Anew`axes[j]`stab, H);
       
       for h in Htrans diff {@ Id(G)@} do

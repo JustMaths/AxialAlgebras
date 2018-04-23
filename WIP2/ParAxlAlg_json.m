@@ -203,7 +203,7 @@ intrinsic JSON(A::ParAxlAlg: subalgs:=0) -> MonStgElt
   {
   Serialise a partial axial algebra as a JSON object.
   
-  There is an optional flag, subalgs.  If 1 then it saves all subalgebra information recursively, if 0 it only saves the subalgebras of the top algebra and if -1 it doesn't save any.  The default is -1.
+  There is an optional flag, subalgs.  If 1 then it saves all subalgebra information recursively, if 0 it only saves the subalgebras of the top algebra and if -1 it doesn't save any.  The default is 0.
   }
   return JSON(ParAxlAlgToList(A: subalgs := subalgs));
 end intrinsic;
@@ -213,7 +213,7 @@ intrinsic ParAxlAlgToList(A::ParAxlAlg: subalgs:=0) -> List
   {
   Converts a partial axial algebra to a list prior to serialising as a JSON object.
   
-  There is an optional flag, subalgs.  If 1 then it saves all subalgebra information recursively, if 0 it only saves the subalgebras of the top algebra and if -1 it doesn't save any.  The default is -1.
+  There is an optional flag, subalgs.  If 1 then it saves all subalgebra information recursively, if 0 it only saves the subalgebras of the top algebra and if -1 it doesn't save any.  The default is 0.
   }
   G := Group(A);
   gen := GeneratorsSequence(G);
@@ -453,14 +453,19 @@ intrinsic PartialAxialAlgebra(alg::Assoc) -> ParAxlAlg
   A`mult := [ [ A`W!Numbers(row): row in mat ]: mat in alg["mult"]];
 
   if "subalgs" in keys then
-    keys_subalg := Keys(alg["subalgs"]);
     subalgs := New(SubAlg);
     subalgs`subsps := {@ sub<A`W | [Numbers(v) : v in bas]> : bas in alg["subalgs"]["subsps"] @};
     subalgs`algs := {@ PartialAxialAlgebra(x) : x in alg["subalgs"]["algs"] @};
-    subalgs`maps := [* < 
-        hom<subalgs`subsps[i] -> subalgs`algs[triple[3]]`W | [ <Numbers(t[1]), Numbers(t[2])> : t in triple[1]]>,
-        hom<Group(subalgs`algs[triple[3]]) -> G | [ <Numbers(t[1]), Numbers(t[2])> : t in triple[2]]>,
-        triple[3] > where triple := alg["subalgs"]["maps"][i] : i in [1..#alg["subalgs"]["maps"]] *];
+    
+    subalgs`maps := [* *];
+    for i in [1..#alg["subalgs"]["maps"]] do
+      map_list, homg_list, pos := Explode(alg["subalgs"]["maps"][i]);
+      map := hom<subalgs`subsps[i] -> subalgs`algs[pos]`W | [ <Numbers(t[1]), Numbers(t[2])> : t in map_list]>;
+      
+      H := sub<G | [G!Numbers(t[1]) : t in homg_list]>;
+      homg := hom< H -> Group(subalgs`algs[pos]) | [ <Numbers(t[1]), Numbers(t[2])> : t in homg_list]>;
+      Append(~subalgs`maps, <map, homg, pos>);
+    end for;
     A`subalgs := subalgs;
   end if;
   
