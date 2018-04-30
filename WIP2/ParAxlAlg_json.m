@@ -454,7 +454,7 @@ intrinsic PartialAxialAlgebra(alg::Assoc) -> ParAxlAlg
 
   if "subalgs" in keys then
     subalgs := New(SubAlg);
-    subalgs`subsps := {@ sub<A`W | [Numbers(v) : v in bas]> : bas in alg["subalgs"]["subsps"] @};
+    subalgs`subsps := [* sub<A`W | [Numbers(v) : v in bas]> : bas in alg["subalgs"]["subsps"] *];
     subalgs`algs := {@ PartialAxialAlgebra(x) : x in alg["subalgs"]["algs"] @};
     
     subalgs`maps := [* *];

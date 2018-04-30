@@ -20,17 +20,58 @@ Check to see if Dim(V) = Dim(W) and if not goto (1) and repeat.
 There is a dimension limit where if W exceeds this then it won't be expanded further the procedure exits
 
 */
-intrinsic AxialReduce(A::ParAxlAlg: dimension_limit := 150, saves:=true, reduction_limit:= Maximum(Floor(Dimension(A)/4), 50)) -> ParAxlAlg, BoolElt
+intrinsic AxialReduce(A::ParAxlAlg: dimension_limit := 150, saves:=true, backtrack := false, reduction_limit:= Maximum(Floor(Dimension(A)/4), 50)) -> ParAxlAlg, BoolElt
   {
-  Performs ExpandOdd, ExpandEven and ExpandSpace repeatedly until either we have completed, or the dimension limit has been reached.
+  Performs ExpandEven and ExpandSpace repeatedly until either we have completed, or the dimension limit has been reached.
   }
   if Dimension(A) eq 0 then
     return A;
   end if;
 
   while Dimension(A) ne Dimension(A`V) and Dimension(A) le dimension_limit do
-    A := ExpandSpace(A);
-    A := ExpandEven(A:reduction_limit:=reduction_limit);
+  
+    reduced := false;
+    while not reduced do
+      AA, phi := ExpandSpace(A: implement:= not backtrack);
+      
+      if backtrack and Dimension(sub<AA`W|AA`rels> meet AA`V) ne 0 then
+        vprint ParAxlAlg, 4: "Backtracking...";
+        // U := SaturateSubspace(AA, sub<AA`W|AA`rels>);
+        U := sub<AA`W|AA`rels>;
+        pullback := Matrix([ (AA`V).i@@phi : i in [1..Dimension(AA`V)]]);
+        Coeffs := [ Coordinates(AA`V, v) : v in Basis(U meet AA`V)];
+        Upullback := sub<A`W | FastMatrix(Coeffs, pullback)>;
+        Upullback := SaturateSubspace(A, Upullback);
+        A := ReduceSaturated(A, Upullback);
+        if Dimension(A) eq Dimension(A`V) then
+          AA := A;
+          break;
+        end if;
+      else
+        AA, psi := ImplementRelations(AA);
+        phi := phi*psi;
+        reduced := true;
+      end if;
+    end while;
+    
+    AA := ExpandEven(AA: reduction_limit:=reduction_limit, backtrack := backtrack);
+    
+    if backtrack and Dimension(sub<AA`W|AA`rels> meet AA`V) ne 0 then
+      vprint ParAxlAlg, 4: "Backtracking...";
+      // U := SaturateSubspace(AA, sub<AA`W|AA`rels>);
+      U := sub<AA`W|AA`rels>;
+      pullback := Matrix([ (AA`V).i@@phi : i in [1..Dimension(AA`V)]]);
+      Coeffs := [ Coordinates(AA`V, v) : v in Basis(U meet AA`V)];
+      Upullback := sub<A`W | FastMatrix(Coeffs, pullback)>;
+      Upullback := SaturateSubspace(A, Upullback);
+      A := ReduceSaturated(A, Upullback);
+    else
+      if #AA`rels ne 0 then
+        A := ImplementRelations(AA);
+      else
+        A := AA;
+      end if;
+    end if;
   end while;
 
   if Dimension(A) eq Dimension(A`V) then
@@ -285,7 +326,7 @@ intrinsic ImplementRelations(A::ParAxlAlg: max_number:=#A`rels) -> ParAxlAlg, Ma
   t:=Cputime();
   Anew := A;
 
-  phi := hom<A`W->A`W|Morphism(A`W, A`W)>;
+  phi := hom<A`W -> A`W | Morphism(A`W, A`W)>;
   while assigned Anew`rels and #Anew`rels ne 0 do
     vprintf ParAxlAlg, 1: "Dim(A) is %o, Dim(V) is %o, number of relations is %o.\n", Dimension(Anew), Dimension(Anew`V), #Anew`rels;
     U := SaturateSubspace(Anew, sub<Anew`W| Anew`rels[1..Minimum(max_number, #Anew`rels)]>);
@@ -420,7 +461,7 @@ ijpos := function(i,j,n)
   end if;
 end function;
 
-intrinsic ExpandSpace(A::ParAxlAlg) -> ParAxlAlg, Map
+intrinsic ExpandSpace(A::ParAxlAlg: implement := true) -> ParAxlAlg, Map
   {
   Let A = V \oplus C.  This function expands A to S^2(C) \oplus (V \otimes C) \oplus A, with the new V being the old A.  We then factor out by the known multiplications in old V and return the new partial axial algebra.
   }
@@ -626,7 +667,7 @@ intrinsic ExpandSpace(A::ParAxlAlg) -> ParAxlAlg, Map
   vprint ParAxlAlg, 2: "  Updating the subalgebras.";
   tt := Cputime();
   subalgs := New(SubAlg);
-  subalgs`subsps := {@ Parent(Wnew) | @};
+  subalgs`subsps := [* *];
   subalgs`maps := [* *];
   subalgs`algs := A`subalgs`algs;
   for i in [1..#A`subalgs`subsps] do
@@ -657,7 +698,7 @@ intrinsic ExpandSpace(A::ParAxlAlg) -> ParAxlAlg, Map
          cat [ <prodsC2[l*(l-1) div 2 + k], (alg!basC[k]@map * alg!basC[l]@map)`elt>
                  : k in [1..l], l in [1..#basC]]>;
     
-    Include(~subalgs`subsps, newsubsp);
+    Append(~subalgs`subsps, newsubsp);
     Append(~subalgs`maps, <newmap, homg, pos>);
   end for;
   Anew`subalgs := subalgs;
@@ -675,10 +716,15 @@ intrinsic ExpandSpace(A::ParAxlAlg) -> ParAxlAlg, Map
   end for;
   vprintf ParAxlAlg, 4: "Time taken %o.\n", Cputime(tt);
 
-  vprintf ParAxlAlg, 4: "Total time taken for ExpandSpace (before ImplementRelations) %o\n", Cputime(t);
-  Anew, psi := ImplementRelations(Anew);
-  vprintf ParAxlAlg, 4: "Total time taken for ExpandSpace (including ImplementRelations) %o\n", Cputime(t);
-  return Anew, WtoWnew*psi;
+  if implement then
+    vprintf ParAxlAlg, 4: "Total time taken for ExpandSpace (before ImplementRelations) %o\n", Cputime(t);
+    Anew, psi := ImplementRelations(Anew);
+    vprintf ParAxlAlg, 4: "Total time taken for ExpandSpace (including ImplementRelations) %o\n", Cputime(t);
+    return Anew, WtoWnew*psi;
+  else
+    vprintf ParAxlAlg, 4: "Total time taken for ExpandSpace %o\n", Cputime(t);
+    return Anew, WtoWnew;
+  end if;
 end intrinsic;
 //
 // ============== FIND EIGENVALUES AND RELATIONS ==================
@@ -904,6 +950,10 @@ intrinsic ExpandEven(A::ParAxlAlg: implement:=true, backtrack := false, reductio
     return A;
   end if;
   
+  if backtrack then
+    implement := false;
+  end if;
+  
   t := Cputime();
   vprint ParAxlAlg, 1: "Imposing the even relations.";
   
@@ -931,9 +981,18 @@ intrinsic ExpandEven(A::ParAxlAlg: implement:=true, backtrack := false, reductio
     // We find the lowest stage so that there is an axis which has changed since we last worked on it.
     so := exists(tup){ <i, j> : i in [1..#A`axes], j in [1..5] |
                            stage_flag[i,j] ne StageDimensions(A, i)};
+    
     if so then
       // There is work to do, so we do it!
       i, stage := Explode(tup);
+      
+      // Check if we are backtracking and we already have an intersection with V
+      // If so, then we want to skip to propogating relations and exit
+      if backtrack and exists{i : i in [1..#A`axes] | Dimension(A`axes[i]`even[{}] meet A`V) ne 0} then
+        // NB we do not make the subspace G-invariant.  It is quicker to pull back the intersection and do that in the previous (unexpanded) algebra.
+        A`rels join:= &join{@ IndexedSet(Basis(A`axes[i]`even[{}])) : i in [1..#A`axes]@};
+        return A;
+      end if;        
 
       // We begin by multplying down
       if stage eq 1 then

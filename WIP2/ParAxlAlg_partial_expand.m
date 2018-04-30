@@ -267,7 +267,7 @@ intrinsic PartialExpandSpace(A::ParAxlAlg, U::ModTupFld) -> ParAxlAlg, Map
   vprint ParAxlAlg, 2: "  Updating the subalgebras.";
   tt := Cputime();
   subalgs := New(SubAlg);
-  subalgs`subsps := {@ Parent(Wnew) | @};
+  subalgs`subsps := [* *];
   subalgs`maps := [* *];
   subalgs`algs := A`subalgs`algs;
   for i in [1..#A`subalgs`subsps] do
@@ -308,7 +308,7 @@ intrinsic PartialExpandSpace(A::ParAxlAlg, U::ModTupFld) -> ParAxlAlg, Map
 //         cat [ <prodsX2[l,k], (alg!bas_subspVX[k]@map * alg!bas_subspVX[l]@map)`elt>
 //                 : k in [1..l], l in [1..#bas_subspVX]]>;
     
-    Include(~subalgs`subsps, newsubsp);
+    Append(~subalgs`subsps, newsubsp);
     Append(~subalgs`maps, <newmap, homg, pos>);
   end for;
   Anew`subalgs := subalgs;

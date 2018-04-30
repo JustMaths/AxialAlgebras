@@ -32,7 +32,7 @@ declare attributes ParAxlAlgElt:
 declare type SubAlg;
 
 declare attributes SubAlg:
-  subsps,         // A SetIndx of vector (sub)spaces
+  subsps,         // A List of vector (sub)spaces
   maps,           // A List of tups < map, homg, j>, where map: subsps -> algs[j]`W is a hom
                   // and homg: Group(A) -> Group(alg) is a group hom
   algs;           // A SetIndx of partial algebras

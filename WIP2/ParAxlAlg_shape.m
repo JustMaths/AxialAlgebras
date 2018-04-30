@@ -218,28 +218,32 @@ end intrinsic;
 Given a GSet Ax and an admissible tau map, return the shapes of possible algebras, deduped by the action of stab.
 
 */
-FindMinRep := function(orb, L, num)
+FindMinRep := function(orb, L, Ax)
   assert exists(l){ l : l in L | exists{ o : o in orb | o[1] eq l}};
   lorb := {@ x : x in orb | x[1] eq l @};
-  assert exists(pair){ x : i in L cat [ i : i in [1..num] | i notin L] |
+  assert exists(pair){ x : i in L cat [ i : i in Ax | i notin L] |
                      exists(x){x : x in lorb | x[2] eq i}};
   return pair;
 end function;
 
-intrinsic Shapes(Ax::GSet, tau::Map, stab::GrpPerm) -> SeqEnum
+intrinsic FindShapeConnectedComponents(Ax::GSet, tau::Map, K::GrpPerm, axes::SetIndx) -> SeqEnum, SeqEnum
   {
-  Given a GSet Ax and a tau map, we find all the possible shapes of algebra.
-  }
-  G := Group(Ax);
+  axes is a set of K-invariant axes, where the action is given by Ax and tau is an admissible tau-map.  We find the connected components of the graph on the dihedral subalgeras on axes.
   
-  orbs := Orbits(G, Ax);
+  We return two sequences.  The elements of the second are sequences which represent the connected components.  Each connected component is a sequence of tuples < o, orbit>, where orbit is the orbit of o under K. The first is a sequence of representatives for the second.
+  }
+  require axes subset Ax: "The set of axes given is not a subset of the GSet.";
+  require K subset Group(Ax): "The group does not act on the given GSet.";
+  require OrbitClosure(K, Ax, axes) eq axes: "The axes are not invariant under the group.";
+
+  Sort(~axes);
+  orbs := Orbits(K, GSet(K, Ax, axes));
   orb_reps := [o[1] : o in orbs];
   // We find the orbit representatives on pairs and so the possible 2-gen subalgebras
-  pairs_orb_reps := [ FindMinRep(o, orb_reps, #Ax) : o in Orbits(ActionImage(G, GSet(G,Ax,{ {@i,j@} : j in [i+1..#Ax], i in [1..#Ax]})))];
+  pairs_orb_reps := [ FindMinRep(o, orb_reps, axes) : o in Orbits(ActionImage(K, GSet(K,Ax,{ {@i,j@} : i,j in axes | i ne j})))];
   
   // We assume throughout that the first two elements in the set generate the algebra.
   // NB by using a seq instead a set here for the list of subalgebras, we are allowing the same set of axes to define different dihedral subalgebras (although they must be of the same type).  eg, for 5A we do not assume that the extra basis element is the same for differnt pairs of generating axes.
-  
   subalgs := [ &join{@ {@ Image(rho^k, Ax, o[1]), Image(rho^k, Ax, o[2] ) @} : k in [0..Order(rho)-1] @} where rho := (o[1]@tau)*(o[2]@tau): o in pairs_orb_reps ];
   Sort(~subalgs, func<x,y|#y-#x>); // Sort largest first
   
@@ -253,10 +257,10 @@ intrinsic Shapes(Ax::GSet, tau::Map, stab::GrpPerm) -> SeqEnum
           exists{ j : j in [1..#sh[2]] |
                t subset sh[2,j] or sh[2,j] subset t }}];
     if #involved eq 0 then
-      Append(~defining_shapes, [ < t, Orbit(G, Ax, t) > ]);
+      Append(~defining_shapes, [ < t, Orbit(K, Ax, t) > ]);
     else
       // We must merge all the shapes which are involved with the new one.
-      defining_shapes[involved[1]] cat:= &cat [ defining_shapes[i] : i in involved[2..#involved] ] cat [ < t, Orbit(G, Ax, t) > ];
+      defining_shapes[involved[1]] cat:= &cat [ defining_shapes[i] : i in involved[2..#involved] ] cat [ < t, Orbit(K, Ax, t) > ];
       for i in Reverse(involved)[1..#involved-1] do
         Remove(~defining_shapes, i);
       end for;
@@ -264,6 +268,17 @@ intrinsic Shapes(Ax::GSet, tau::Map, stab::GrpPerm) -> SeqEnum
   end for;
 
   defining_shape_reps := [ Sort([ t[1] : t in sets ], func<x,y|#y-#x>) : sets in defining_shapes ];
+  
+  return defining_shape_reps, defining_shapes;
+end intrinsic;
+
+intrinsic Shapes(Ax::GSet, tau::Map, stab::GrpPerm) -> SeqEnum
+  {
+  Given a GSet Ax and a tau map, we find all the possible shapes of algebra.
+  }
+  G := Group(Ax);
+  
+  defining_shape_reps, defining_shapes := FindShapeConnectedComponents(Ax, tau, G, Ax);
   
   // Now we need to pick the possible choices for each connected component
 
@@ -416,33 +431,47 @@ end intrinsic;
 Function to return the restriction of the shape to the set of axes given by axes
 
 */
-intrinsic RestrictShape(Ax::GSet, tau::Map, shape::SeqEnum, axes::SetIndx) -> SeqEnum, SeqEnum
+intrinsic RestrictShape(Ax::GSet, tau::Map, shape::SeqEnum, K::GrpPerm, axes::SetIndx) -> SeqEnum, SeqEnum
   {
-  Given a shape type defined by Ax, tau and shape, and a set of axes, calculate the restriction of the shape to the set of axes.  Returns the type and the sequence of types seen from the original shape.
+  Given a shape type defined by Ax, tau and shape, and a set of axes acted upon by K, calculate the restriction of the shape to the set of axes.  Returns the type and the sequence of types seen from the original shape.
   }
   G := Group(Ax);
+  require K subset G: "K must act in Ax.";
   
   full_type := [];  // records the full shape information
   type_flag := [ false : sh in shape];  // records the index of which types were seen
 
-  for i in [1..#shape] do
-    sh := shape[i];
-    if exists(g){ g : g in G | Image(g, Ax, sh[1]) subset axes} then
-      Append(~full_type, < Image(g, Ax, sh[1]), sh[2]>);
+  Sort(~axes);
+  
+  defining_shape_reps := FindShapeConnectedComponents(Ax, tau, K, axes);
+  // We need only care about the maximal size subalges in each representative
+  reps := [ [ subalg : subalg in rep | #subalg eq #rep[1]] : rep in defining_shape_reps];
+  
+  // For each representative of the orbit, we must find what the induced shape is
+  
+  for rep in reps do
+    // check if we have the full image of a shape from Ax
+    if exists(i){ i : i in [1..#shape], g in G | Image(g, Ax, shape[i,1]) in rep} then
+      full_type cat:= [ < subalg, shape[i,2]> : subalg in rep];
       type_flag[i] := true;
+      continue;
     end if;
-    // A 6A, 4A, 4B could also intersect in a smaller subalgebra
-    // (even if a conjugate copy intersected fully)
-    if sh[2] eq "6A" then
-      if exists(g){ g : g in G | #(Image(g, Ax, sh[1]) meet axes) eq 3} then
-        Append(~full_type, <Image(g, Ax, sh[1]) meet axes, "3A">);
-      elif exists(g){ g : g in G | #(Image(g, Ax, sh[1]) meet axes) eq 2} then
-        Append(~full_type, <Image(g, Ax, sh[1]) meet axes, "2A">);
-      end if;
-    elif sh[2] eq "4A" and exists(g){ g : g in G | #(Image(g, Ax, sh[1]) meet axes) eq 2} then
-      Append(~full_type, <Image(g, Ax, sh[1]) meet axes, "2B">);
-    elif sh[2] eq "4B" and exists(g){ g : g in G | #(Image(g, Ax, sh[1]) meet axes) eq 2} then
-      Append(~full_type, <Image(g, Ax, sh[1]) meet axes, "2A">);
+    
+    // otherwise we must have an intersection of a 6A, or a 4A, 4B with axes
+    assert #rep[1] in {2,3};
+    // if subalg has size 3 it can only have come from a 6A
+    if #rep[1] eq 3 then
+      full_type cat:= [ < subalg, "3A"> : subalg in rep];
+      continue;
+    end if;
+    
+    assert exists(sh){ sh : sh in shape, g in G | Image(g, Ax, rep[1]) subset sh[1]};
+    assert sh[2][1] in {"4", "6"};
+    if sh[2] eq "4A" then
+      full_type cat:= [ < subalg, "2B"> : subalg in rep];
+    else
+      // sh is 4B, or 6A
+      full_type cat:= [ < subalg, "2A"> : subalg in rep];
     end if;
   end for;
   Sort(~full_type, func<x,y | ShapeSort(x[2],y[2])>);
@@ -487,6 +516,7 @@ intrinsic MaximalGluingSubalgebras(field::Fld, Ax::GSet, tau::Map, shape::SeqEnu
     while #subsets ne 0 do
       set := subsets[1];
       axes := &join orbs[Setseq(set)];
+      Sort(~axes);
       K := sub<G | FewGenerators(sub<G | axes@tau>)>;
       
       num := IndexedSet([1..#axes]);
@@ -511,13 +541,13 @@ intrinsic MaximalGluingSubalgebras(field::Fld, Ax::GSet, tau::Map, shape::SeqEnu
         continue;
       end if;
       
-      Kshape, flags := RestrictShape(Ax, tau, shape, axes);
+      Kshape, flags := RestrictShape(Ax, tau, shape, K, axes);
       Kshape := [ <{@ Position(axes, i) : i in t[1] @}, t[2]> : t in Kshape ];
       
       if not gluing then
         // We find the GSet, tau and shape for the maximal object only
         subsets := [ S : S in subsets |  not S subset set ];
-        Append(~maxsubalgs, <Kx_faithful, Ktau_faithful, Kshape>);
+        Append(~maxsubalgs, [*Kx_faithful, Ktau_faithful, Kshape*]);
         
         Or(~shape_flags, flags);
         continue;

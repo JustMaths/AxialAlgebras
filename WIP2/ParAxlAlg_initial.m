@@ -69,7 +69,7 @@ intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_tab
   A`GSet_to_axes := map<Ax -> W | i :-> W.i>;
 
   subalgs := New(SubAlg);
-  subalgs`subsps := {@ @};
+  subalgs`subsps := [* *];
   subalgs`algs := {@ @};
   subalgs`maps := [* *];
 
@@ -112,7 +112,7 @@ intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_tab
       assert forall{ <v,g> : v in Basis(subsp), g in H |
                        ((A!v)*(g))`elt @map eq (alg!(v@map)*(g@homg))`elt };
         
-      subalgs`subsps join:= {@ subsp @};
+      subalgs`subsps cat:= [* subsp *];
       if alg in subalgs`algs then
         pos := Position(subalgs`algs, alg);
       else
@@ -137,7 +137,7 @@ intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_tab
     orb, type := Explode(shape[i]);
 
     subsp := RSpaceWithBasis([ A`W.i : i in orb]);
-    subalgs`subsps join:= {@ subsp @};
+    subalgs`subsps cat:= [* subsp *];
 
     alg := LoadPartialAxialAlgebra(Sprintf("library/%m/basic_algebras/%o", field, type));
     if alg in subalgs`algs then
@@ -346,7 +346,7 @@ intrinsic UpdateSubalgebras(A::ParAxlAlg, ~Anew::ParAxlAlg, psi::Map : algs := A
   }
   W := A`W;
   Wnew := Anew`W;
-  newsubsps := {@ Parent(Wnew) | @};
+  newsubsps := [* *];
   newmaps := [* *];
   
   for i in [1..#A`subalgs`subsps] do
@@ -362,7 +362,7 @@ intrinsic UpdateSubalgebras(A::ParAxlAlg, ~Anew::ParAxlAlg, psi::Map : algs := A
 
     newsubsp := sub<Wnew | [Wnew | u@psi_rest : u in Basis(subsp)]>;
     newmap := hom< newsubsp -> alg`W | [ u@@psi_rest@map : u in Basis(newsubsp)]>;
-    Include(~newsubsps, newsubsp);
+    Append(~newsubsps, newsubsp);
     Append(~newmaps, <newmap, homg, pos>);
   end for;
   
