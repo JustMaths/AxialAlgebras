@@ -11,7 +11,7 @@ Code to implement a group name which will work in older versions of magma too.
 */
 intrinsic MyGroupName(G::GrpPerm) -> MonStgElt
   {
-  If GroupName is definied in magma (roughly version 2.21 or above) it returns GroupName, otherwise it returns order_num, where <order, num> is given by IdentifyGroup.
+  If GroupName is defined in magma (roughly version 2.21 or above) it returns GroupName, otherwise it returns order_num, where <order, num> is given by IdentifyGroup.
   }
   try
     name := eval("GroupName(G)");
@@ -276,7 +276,7 @@ intrinsic SubAlgToList(x::SubAlg: subalgs := -1) -> List
   }
   alg := [* *];
 
-  Append(~alg, <"subsps", Setseq(x`subsps)>);
+  Append(~alg, <"subsps", x`subsps>);
   
   maps := [];
   for i in [1..#x`maps] do
@@ -509,19 +509,27 @@ end intrinsic;
 Loads all axial algebras with a given group
 
 */
-intrinsic LoadAllGroup(G::GrpPerm :library := library_location, partial:=true) -> SeqEnum
+intrinsic LoadAllGroup(G::GrpPerm :field := Rationals(), library := library_location, partial:=false) -> SeqEnum
   {
   Returns all partial axial algebras with group G.
   }
-  if not MyGroupName(G) in ls(library) then
+  return LoadAllGroup(GroupName(G): field := field, library:=library, partial:=partial);
+end intrinsic;
+
+intrinsic LoadAllGroup(grp_name::MonStgElt :field := Rationals(), library := library_location, partial:=false) -> SeqEnum
+  {
+  Returns all partial axial algebras with groupname grp_name.
+  }
+  path := Sprintf("%o/%m/%o", library, field, grp_name);
+  if not ExistsPath(path) then
     return [];
   end if;
   L := [];
-  for num in Sort(ls(Sprintf("%o/%o", library, MyGroupName(G)))) do
-    shapes := Sort(ls(Sprintf("%o/%o/%o", library, MyGroupName(G), num)));
+  for num in Sort(ls(path)) do
+    shapes := Sort(ls(Sprintf("%o/%o", path, num)));
     for filename in shapes do
       if partial or "_partial" notin filename then
-        Append(~L, LoadPartialAxialAlgebra(Sprintf("%o/%o/%o/%o", library, MyGroupName(G), num, filename)));
+        Append(~L, LoadPartialAxialAlgebra(Sprintf("%o/%o/%o", path, num, filename)));
       end if;
     end for;
   end for;
