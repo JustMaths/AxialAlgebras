@@ -83,7 +83,7 @@ intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_tab
 
   if maximal_subgroups then
     // find which subalgebras we can glue in
-    maxsubalgs, flags := MaximalGluingSubalgebras(field, Ax, tau, shape: gluing:=true);
+    maxsubalgs, flags := MaximalGluingSubalgebras(Ax, tau, shape: field := field, gluing:=true);
     
     for maxsubalg in maxsubalgs do
       file, glue, homg := Explode(maxsubalg);
