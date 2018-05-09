@@ -34,7 +34,10 @@ intrinsic AxialReduce(A::ParAxlAlg: dimension_limit := 150, saves:=true, backtra
     while not reduced do
       AA, phi := ExpandSpace(A: implement:= not backtrack);
       
-      if backtrack and Dimension(sub<AA`W|AA`rels> meet AA`V) ne 0 then
+      if Dimension(AA) eq 0 then
+        A := AA;
+        break;
+      elif backtrack and Dimension(sub<AA`W|AA`rels> meet AA`V) ne 0 then
         vprint ParAxlAlg, 4: "Backtracking...";
         // U := SaturateSubspace(AA, sub<AA`W|AA`rels>);
         U := sub<AA`W|AA`rels>;
@@ -56,7 +59,10 @@ intrinsic AxialReduce(A::ParAxlAlg: dimension_limit := 150, saves:=true, backtra
     
     AA := ExpandEven(AA: reduction_limit:=reduction_limit, backtrack := backtrack);
     
-    if backtrack and Dimension(sub<AA`W|AA`rels> meet AA`V) ne 0 then
+    if Dimension(AA) eq 0 then
+      A := AA;
+      break;
+    elif backtrack and Dimension(sub<AA`W|AA`rels> meet AA`V) ne 0 then
       vprint ParAxlAlg, 4: "Backtracking...";
       // U := SaturateSubspace(AA, sub<AA`W|AA`rels>);
       U := sub<AA`W|AA`rels>;
@@ -1044,8 +1050,19 @@ intrinsic ExpandEven(A::ParAxlAlg: implement:=true, backtrack := false, reductio
     end if;
     
     // if there is no work to do, or we have found enough relations, then we mod out and check to see if we are really done.
-    if not so or ( stage_flag[1,5,1] ne -1 and Dimension(A`axes[1]`even[{@@}]) ge reduction_limit) then
-      A`rels join:= {@ A`W | w : w in Basis(A`axes[1]`even[{@@}]) @};
+    if not so or (implement and Dimension(A`axes[i]`even[{@@}]) ge reduction_limit) then
+    
+      // Find which empty eigenspaces are not G-invariant
+      dims_empty := [ Dimension(A`axes[j]`even[{}]) : j in [1..#A`axes]];
+      altered_empties := {j : j in [1..#A`axes] | 
+               Dimension(A`axes[j]`even[{@@}]) notin {0, dims_empty[j]}};
+      U := GInvariantSubspace(A`Wmod, A`W, 
+               &cat[ Basis(A`axes[j]`even[{@@}]) : j in altered_empties]);
+      
+      // All the rest are G-invariant, or 0 and so have already been added to rels
+      
+      A`rels join:= {@ A`W | v : v in Basis(U) @};
+      
       if #A`rels ne 0 and implement then
         vprint ParAxlAlg, 2: "  Reducing the algebra";
         tt := Cputime();

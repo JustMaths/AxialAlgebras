@@ -286,10 +286,17 @@ intrinsic Shapes(Ax::GSet, tau::Map, stab::GrpPerm) -> SeqEnum
   shape := [];
   while #defining_shape_reps ne 0 and #defining_shape_reps[1,1] ge 5 do
     for o in defining_shape_reps[1] do
+      // We must add each orbits which is in a connected component.
+      // Those with a 6A, or 5A may only intersect others in 2A, or 3A.
+      // Since any 2A, or 3A always appears as an intersection, we need not add these.
+      // 2B and 3C cannot appear as intersections, and hence no 4As
+      // But 4B can intersect in a 2A
       if #o eq 6 then 
         Append(~shape, < o, "6A" >);
       elif #o eq 5 then
         Append(~shape, < o, "5A" >);
+      elif #o eq 4 then
+        Append(~shape, < o, "4B" >);
       end if;
     end for;
     Remove(~defining_shape_reps, 1);
@@ -337,6 +344,9 @@ intrinsic Shapes(Ax::GSet, tau::Map, stab::GrpPerm) -> SeqEnum
 
   shapes := [];
   for b in bin_reps do
+    // We now calculate the extra shapes
+    // Note that since there are no orbits of length 5, or 6 left, the only intersections that may occur are 4s with 2s.
+    // We need only count the 4s
     extra := &cat[ [ < defining_shape_reps[i,j], IntegerToString(#defining_shape_reps[i,j]) cat (b[i] eq 0 select "A" else "B") > : j in [1..#defining_shape_reps[i]] | #defining_shape_reps[i,j] eq #defining_shape_reps[i,1] ] : i in [1..Degree(b)]];
     // correct for 3B to 3C
     extra := [ x[2] eq "3B" select < x[1], "3C" > else x : x in extra];
@@ -444,35 +454,44 @@ intrinsic RestrictShape(Ax::GSet, tau::Map, shape::SeqEnum, K::GrpPerm, axes::Se
   Sort(~axes);
   
   defining_shape_reps := FindShapeConnectedComponents(Ax, tau, K, axes);
-  // We need only care about the maximal size subalges in each representative
-  reps := [ [ subalg : subalg in rep | #subalg eq #rep[1]] : rep in defining_shape_reps];
+  // We must identify the shape in the larger algebra for each connected component.  The components from the larger algebra may split, but they cannot join.
   
-  // For each representative of the orbit, we must find what the induced shape is
-  
-  for rep in reps do
-    // check if we have the full image of a shape from Ax
-    if exists(i){ i : i in [1..#shape], g in G | Image(g, Ax, shape[i,1]) in rep} then
-      full_type cat:= [ < subalg, shape[i,2]> : subalg in rep];
-      type_flag[i] := true;
-      continue;
-    end if;
+  for rep in defining_shape_reps do
+    for o in rep do
     
-    // otherwise we must have an intersection of a 6A, or a 4A, 4B with axes
-    assert #rep[1] in {2,3};
-    // if subalg has size 3 it can only have come from a 6A
-    if #rep[1] eq 3 then
-      full_type cat:= [ < subalg, "3A"> : subalg in rep];
-      continue;
-    end if;
-    
-    assert exists(sh){ sh : sh in shape, g in G | Image(g, Ax, rep[1]) subset sh[1]};
-    assert sh[2][1] in {"4", "6"};
-    if sh[2] eq "4A" then
-      full_type cat:= [ < subalg, "2B"> : subalg in rep];
-    else
-      // sh is 4B, or 6A
-      full_type cat:= [ < subalg, "2A"> : subalg in rep];
-    end if;
+      // We only need to record the subalgebras which are define a connected component, not those which are contained in others.
+      // If the size of the largest subalgebra is 6, we need to record 4s and 6s
+      // Otherwise, we just need to record the ones with size equal to the largest.
+      // Since components from the larger algebra may split but not join, a defining subalgebra in the larger algebra must either be defining in the smaller algebra, or not intersect at all.  So when identifying which subalgebras from the larger algebra are seen in the smaller, we need only consdier the defining subalgebras of the smaller algebra.
+      
+      if (#rep[1] eq 6 and #o notin {4,6}) or #o ne #rep[1] then
+        continue rep;
+      end if;
+      
+      // check if we have the full image of a shape from Ax
+      if exists(i){ i : i in [1..#shape], g in G | Image(g, Ax, shape[i,1]) eq o} then
+        Append(~full_type, < o, shape[i,2]>);
+        type_flag[i] := true;
+        continue o;
+      end if;
+      
+      // otherwise we must have an intersection of a 6A, or a 4A, 4B with axes
+      assert #o in {2,3};
+      // if subalg has size 3 it can only have come from a 6A
+      if #o eq 3 then
+        Append(~full_type, < o, "3A">);
+        continue o;
+      end if;
+      
+      assert exists(sh){ sh : sh in shape, g in G | Image(g, Ax, o) subset sh[1]};
+      assert sh[2][1] in {"4", "6"};
+      if sh[2] eq "4A" then
+        Append(~full_type, < o, "2B">);
+      else
+        // sh is 4B, or 6A
+        Append(~full_type, < o, "2A">);
+      end if;
+    end for;
   end for;
   Sort(~full_type, func<x,y | ShapeSort(x[2],y[2])>);
   
