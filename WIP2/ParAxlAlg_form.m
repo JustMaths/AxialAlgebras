@@ -101,14 +101,19 @@ intrinsic HasFrobeniusForm(A::ParAxlAlg) -> BoolElt, AlgMatElt, RngIntElt
   end if;
   G := Group(A);
   W := A`W;
-  axes := Setseq(Image(A`GSet_to_axes));
   
-  conjs := [ Setseq(Transversal(G, A`axes[i]`stab)) : i in [1..#A`axes] ];
-  allconjs := &cat conjs;
+  Ax := A`GSet;
+  // We form the orbits, sorting them in the order in the order from Ax.
+  orbs := Sort([ Sort(o) : o in Orbits(G, Ax)], func<x,y|x[1]-y[1]>);
+  axes := Setseq(&join [ o@A`GSet_to_axes : o in orbs]);
+  conjs := [ [ g where _, g := IsConjugate(G, Ax, o[1], o[j]) : j in [1..#o]] : o in orbs];
 
   U := sub<W | axes>;
-  bas := [ < 1,i, axes[i]>: i in [1..#axes]];
-  // This will be a list of all of the products
+  // We build a basis
+  // These are a sequence of tuples <m, j, v>, where v is the element which is the jth element oin the mth level of prods.
+  bas := [ < 1, i, axes[i] >: i in [1..#axes]];
+  // We also maintain a list of products we have seen before
+  // These are a list sequences of tuples.  The sequences are the number of axes multiplied together.  Each tuple is of the form <S, v>, where v is the answer and S is a list of lists of indexes of axes, representing the multiplication of those axes with brackets given by the lists (no list means no multiplication ie a single axis).
   prods := [*[< i, axes[i] > : i in [1..#axes]]*];
   
   m := 1;
