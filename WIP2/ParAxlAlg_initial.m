@@ -188,8 +188,22 @@ intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_tab
   A`mult := [];
   A`rels := {@ @};
   PullbackEigenvaluesAndRelations(New(ParAxlAlg), ~A: force_all:=true);
+  
+  // We force the grading and do the wh-w trick as we assume this has been done before an expansion
+  A := ForceGrading(A);
+  
+  max_size := Max([#S : S in Keys(A`axes[1]`even)]);
+  assert exists(evens){S : S in Keys(A`axes[1]`even) | #S eq max_size};
+  
+  for i in [1..#A`axes] do
+    actionhom := GModuleAction(A`Wmod);
+    Hmat := [ h@actionhom - IdentityMatrix(field, #Ax) : h in A`axes[i]`stab | h ne G!1];
     
-  return ForceGrading(A);
+    prods := [ FastMatrix({@ w : w in Basis(A`axes[i]`even[evens])@}, h) : h in Hmat];
+    A`axes[i]`even[evens diff {@1@}] +:= sub< W | &join prods >;
+  end for;
+  
+  return A;
 end intrinsic;
 /*
 

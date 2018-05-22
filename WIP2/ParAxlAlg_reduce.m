@@ -20,7 +20,7 @@ Check to see if Dim(V) = Dim(W) and if not goto (1) and repeat.
 There is a dimension limit where if W exceeds this then it won't be expanded further the procedure exits
 
 */
-intrinsic AxialReduce(A::ParAxlAlg: dimension_limit := 150, saves:=true, backtrack := false, reduction_limit:= Maximum(Floor(Dimension(A)/4), 50)) -> ParAxlAlg, BoolElt
+intrinsic AxialReduce(A::ParAxlAlg: dimension_limit := 150, saves:=true, backtrack := false, reduction_limit:= func<A | Maximum(Floor(Dimension(A)/4), 50)>) -> ParAxlAlg, BoolElt
   {
   Performs ExpandEven and ExpandSpace repeatedly until either we have completed, or the dimension limit has been reached.
   }
@@ -30,53 +30,51 @@ intrinsic AxialReduce(A::ParAxlAlg: dimension_limit := 150, saves:=true, backtra
 
   while Dimension(A) ne Dimension(A`V) and Dimension(A) le dimension_limit do
   
-    reduced := false;
-    while not reduced do
-      AA, phi := ExpandSpace(A: implement:= not backtrack);
-      
-      if Dimension(AA) eq 0 then
-        A := AA;
-        break;
-      elif backtrack and Dimension(sub<AA`W|AA`rels> meet AA`V) ne 0 then
-        vprint ParAxlAlg, 4: "Backtracking...";
-        // U := SaturateSubspace(AA, sub<AA`W|AA`rels>);
-        U := sub<AA`W|AA`rels>;
-        pullback := Matrix([ (AA`V).i@@phi : i in [1..Dimension(AA`V)]]);
-        Coeffs := [ Coordinates(AA`V, v) : v in Basis(U meet AA`V)];
-        Upullback := sub<A`W | FastMatrix(Coeffs, pullback)>;
-        Upullback := SaturateSubspace(A, Upullback);
-        A := ReduceSaturated(A, Upullback);
-        if Dimension(A) eq Dimension(A`V) then
-          AA := A;
-          break;
-        end if;
-      else
-        AA, psi := ImplementRelations(AA);
-        phi := phi*psi;
-        reduced := true;
-      end if;
-    end while;
+    // First we expand
+    AA, phi := ExpandSpace(A: implement:= false);
     
-    AA := ExpandEven(AA: reduction_limit:=reduction_limit, backtrack := backtrack);
-    
-    if Dimension(AA) eq 0 then
-      A := AA;
-      break;
-    elif backtrack and Dimension(sub<AA`W|AA`rels> meet AA`V) ne 0 then
+    // If we are backtracking and there is some intersection then form a new A and continue
+    if backtrack and Dimension(sub<AA`W | AA`rels> meet AA`V) ne 0 then
       vprint ParAxlAlg, 4: "Backtracking...";
-      // U := SaturateSubspace(AA, sub<AA`W|AA`rels>);
-      U := sub<AA`W|AA`rels>;
+      U := sub<AA`W | AA`rels>;
       pullback := Matrix([ (AA`V).i@@phi : i in [1..Dimension(AA`V)]]);
       Coeffs := [ Coordinates(AA`V, v) : v in Basis(U meet AA`V)];
       Upullback := sub<A`W | FastMatrix(Coeffs, pullback)>;
       Upullback := SaturateSubspace(A, Upullback);
       A := ReduceSaturated(A, Upullback);
+      continue;
+    end if;
+    
+    // We have no more intersection found
+    if Dimension(AA) ne 0 then
+      AA, psi := ImplementRelations(AA);
+      phi := phi*psi;
+    end if;
+    if Dimension(AA) eq 0 then
+      A := AA;
+      break;
+    end if;
+    
+    // Now we reduce the even part    
+    AA := ExpandEven(AA: reduction_limit:=reduction_limit(AA), backtrack := backtrack);
+    
+    // If we are backtracking and there is some intersection then form a new A and continue
+    if backtrack and Dimension(sub<AA`W|AA`rels> meet AA`V) ne 0 then
+      vprint ParAxlAlg, 4: "Backtracking...";
+      U := sub<AA`W | AA`rels>;
+      pullback := Matrix([ (AA`V).i@@phi : i in [1..Dimension(AA`V)]]);
+      Coeffs := [ Coordinates(AA`V, v) : v in Basis(U meet AA`V)];
+      Upullback := sub<A`W | FastMatrix(Coeffs, pullback)>;
+      Upullback := SaturateSubspace(A, Upullback);
+      A := ReduceSaturated(A, Upullback);
+      continue;
+    end if;
+    
+    // There is nothing to backtrack to
+    if Dimension(AA) ne 0 and #AA`rels ne 0 then
+      A := ImplementRelations(AA);
     else
-      if #AA`rels ne 0 then
-        A := ImplementRelations(AA);
-      else
-        A := AA;
-      end if;
+      A := AA;
     end if;
   end while;
 
@@ -474,7 +472,7 @@ intrinsic ExpandSpace(A::ParAxlAlg: implement := true) -> ParAxlAlg, Map
   t := Cputime();
   require Dimension(A`W) ne Dimension(A`V): "You have already found the multiplication table to build a full algebra - no need to expand!";
   
-  vprintf ParAxlAlg, 1: "Expanding space from %o dimensions.\n", Dimension(A);  
+  vprintf ParAxlAlg, 1: "Expanding space from %o dimensions.\n", Dimension(A);
   tt := Cputime();
   G := Group(A);
   W := A`W;
@@ -517,103 +515,54 @@ intrinsic ExpandSpace(A::ParAxlAlg: implement := true) -> ParAxlAlg, Map
 
   // We begin by defining two function which we will use to multiply quickly. We use these both in defining the multiplication of Anew and also when building the odd and even parts.
   // precompute mult matrices for VC and C2
+  
+  // We precompute the decompositions
+  decomp := DecomposeVectorsWithInnerProduct(V, Basis(W): ip:=ip);
+  // We transform them into vectors in their natural spaces
+  decompV := [ Coordinates(V,t[1]) : t in decomp ];
+  decompC := [ Coordinates(C,t[2]) : t in decomp ];
+  
   dimV := Dimension(V);
   dimC := Dimension(C);
-  if dimV ne 0 and dimC ne 0 then
+  
+  // precompute all the products we require
+  prodsV := FastMatrix(BulkMultiply(A, decompV), WtoWnew_mat);
+  
+  if dimV eq 0 or dimC eq 0 then
+    prodsVC := [ Wnew!0 : i in [1..(#decomp*(#decomp+1) div 2)]];
+  else
     VC := RSpace(BaseField(W), Dimension(VCmod));
     VCmult := [ [VC.(dimC*(i-1)+j) : j in [1..dimC]]: i in [1..dimV]];
     VCtoWnew_mat := MapToMatrix(injs[2]);
-  else
-    // placeholder so that the functions below can be defined
-    VCmult := [];
-    VCtoWnew_mat := Matrix(Rationals(),[]);
+    newVCmult := BulkMultiply(VCmult, decompV, decompC);
+    prodsVC := FastMatrix([ newVCmult[i,j] + newVCmult[j,i] : j in [1..i], i in [1..#decomp]], VCtoWnew_mat);
   end if;
 
   C2mult := [ [Wnew.ijpos(i,j,dimC) : j in [1..dimC]]: i in [1..dimC]];
+  prodsC2 := BulkMultiply(C2mult, decompC, decompC);
+  /*
+  // This is a little faster on 2nd expansion for PSL(2,11).
+  // Check speeds after fixing BulkMupltiply to do symmetric stuff.
   
-  // ===== Now define two functions ======
-    
+  C2 := RSpace(BaseField(W), Dimension(C2mod));
+  C2mult2 := [ [C2.ijpos(i,j,dimC) : j in [1..dimC]]: i in [1..dimC]];
+  prodsC22 := BulkMultiply(C2mult2, decompC, decompC);
+  C2toWnew_mat := MapToMatrix(injs[1]);
+  prodsC22 := FastMatrix( Flat(prodsC22), C2toWnew_mat);
+  */
   
-  // Function which multiplies L with L
-  function BulkMultiplyAtoAnewSym(L)
-    if #L eq 0 then
-      return [];
-    end if;
-    // We precompute the decompositions
-    decomp := DecomposeVectorsWithInnerProduct(V, [W | v : v in L]: ip:=ip);
-    // We transform them into vectors in their natural spaces
-    decompV := [ Coordinates(V,t[1]) : t in decomp ];
-    decompC := [ Coordinates(C,t[2]) : t in decomp ];
-    
-    // precompute all the products we require
-    prodsV := FastMatrix(BulkMultiply(A, decompV), WtoWnew_mat);
-    
-    if dimV eq 0 or dimC eq 0 then
-      prodsVC := [ Wnew!0 : i in [1..(#decomp*(#decomp+1) div 2)]];
-    else
-      newVCmult := BulkMultiply(VCmult, decompV, decompC);
-      prodsVC := FastMatrix([ newVCmult[i,j] + newVCmult[j,i] : j in [1..i], i in [1..#decomp]], VCtoWnew_mat);
-    end if;
-    
-    prodsC2 := BulkMultiply(C2mult, decompC, decompC);
-    
-    /*
-    // This is a little faster on 2nd expansion for PSL(2,11).
-    // Check speeds after fixing BulkMupltiply to do symmetric stuff.
-    
-    C2 := RSpace(BaseField(W), Dimension(C2mod));
-    C2mult2 := [ [C2.ijpos(i,j,dimC) : j in [1..dimC]]: i in [1..dimC]];
-    prodsC22 := BulkMultiply(C2mult2, decompC, decompC);
-    C2toWnew_mat := MapToMatrix(injs[1]);
-    prodsC22 := FastMatrix( Flat(prodsC22), C2toWnew_mat);
-    */
-    
-    ans := [[Wnew | ] : i in [1..#L]];
+  Anew`mult := [[Wnew | ] : i in [1..Dimension(W)]];
 
-    for i in [1..#L] do
-      for j in [1..i] do
-        ans[i][j] := prodsV[i*(i-1) div 2 +j] + prodsVC[i*(i-1) div 2+j] + prodsC2[i,j];
-        if j ne i then
-          ans[j][i] := ans[i][j];
-        end if;
-      end for;
+  for i in [1..Dimension(W)] do
+    for j in [1..i] do
+      Anew`mult[i][j] := prodsV[i*(i-1) div 2 +j] + prodsVC[i*(i-1) div 2+j] + prodsC2[i,j];
+      if j ne i then
+        Anew`mult[j][i] := Anew`mult[i][j];
+      end if;
     end for;
-    
-    return ans;
-  end function;
-
-  // function which multiplies L with M
-  function BulkMultiplyAtoAnew(L, M)
-    // We precompute the decompositions
-    decomp := DecomposeVectorsWithInnerProduct(V, [W | v : v in L cat M]: ip:=ip);
-    // We transform them into vectors in their natural spaces
-    decompV := [ Coordinates(V,t[1]) : t in decomp ];
-    decompC := [ Coordinates(C,t[2]) : t in decomp ];
-    
-    // precompute all the products we require
-    prodsV := FastMatrix(&cat BulkMultiply(A, decompV[1..#L], decompV[#L+1..#L+#M]), WtoWnew_mat);
-    
-    if dimV eq 0 or dimC eq 0 then
-      prodsL_VxM_C := [ Wnew!0 : i in [1..#L*#M]];
-      prodsM_VxL_C := [ Wnew!0 : i in [1..#L*#M]];
-    else
-      prodsL_VxM_C := FastMatrix( &cat BulkMultiply(VCmult, decompV[1..#L], decompC[#L+1..#L+#M]), VCtoWnew_mat);
-      prodsM_VxL_C := FastMatrix( &cat BulkMultiply(VCmult, decompV[#L+1..#L+#M], decompC[1..#L]), VCtoWnew_mat);
-    end if;
-    
-    prodsC2 := BulkMultiply(C2mult, decompC[1..#L], decompC[#L+1..#L+#M]);
-    
-    ans := [[Wnew | prodsV[(i-1)*#M +j] + prodsL_VxM_C[(i-1)*#M+j] + prodsM_VxL_C[(j-1)*#L +i] + prodsC2[i,j] : j in [1..#M]]: i in [1..#L]];
-      
-    return ans;
-  end function;
-
-  // ===== Return to intrinsic ======
-    
-
-  Anew`mult := BulkMultiplyAtoAnewSym(Basis(W));
+  end for;
   vprintf ParAxlAlg, 4: "  Time taken to build the multiplication table %o.\n", Cputime(tt);
-
+  
   // We now build the axes
   vprint ParAxlAlg, 2: "  Updating the axes.";
   tt := Cputime();
@@ -630,40 +579,132 @@ intrinsic ExpandSpace(A::ParAxlAlg: implement := true) -> ParAxlAlg, Map
   assert exists(odds){S : S in Keys(A`axes[1]`odd) | #S eq max_size};
 
   for i in [1..#A`axes] do
-    bas_even := Basis(A`axes[i]`even[evens]);
-    bas_odd := Basis(A`axes[i]`odd[odds]);
+    // For each axes, the new even part comes from the old even x even plus the old odd x odd.
+    // Similarly for the new odd part
+    // To speed up the calculation we will try to calculate a set of vectors which span and are as linearly independent as possible before building a subspace from them.
+    // For the even case, we also want to remember which pairs we took to speed up the w*h-w trick
 
-    // The even part is EvenxEven plus OddxOdd
-    EvenxEven := BulkMultiplyAtoAnewSym(bas_even);
-    OddxOdd := BulkMultiplyAtoAnewSym(bas_odd);
-    
-    Anew`axes[i]`even[evens] := sub<Wnew | &cat EvenxEven cat &cat OddxOdd>;
-    // The odd part is EvenxOdd
-    EvenxOdd := BulkMultiplyAtoAnew(bas_even, bas_odd);
-    Anew`axes[i]`odd[odds] := sub<Wnew | &cat EvenxOdd>;
-    
+    // Decompose even subspace E into V meet E, C meet E and the rest N
+    Ve := Basis(V meet A`axes[i]`even[evens]);
+    Ce := Basis(C meet A`axes[i]`even[evens]);
+    if Dimension(A`axes[i]`even[evens]) ne #Ve+#Ce then
+      Ne := ExtendBasis(Ve cat Ce, A`axes[i]`even[evens])[#Ve+#Ce+1..Dimension(A`axes[i]`even[evens])];
+    else
+      Ne := [];
+    end if;
+
+    // Decompose the odd similarly
+    Vo := Basis(V meet A`axes[i]`odd[odds]);
+    Co := Basis(C meet A`axes[i]`odd[odds]);
+    if Dimension(A`axes[i]`odd[odds]) ne #Vo+#Co then
+      No := ExtendBasis(Vo cat Co, A`axes[i]`odd[odds])[#Vo+#Co+1..Dimension(A`axes[i]`odd[odds])];
+    else
+      No := [];
+    end if;
+
+    bas := Ve cat Ne cat Ce cat Vo cat No cat Co;
+    nVe := 1;
+    nNe := #Ve+nVe;
+    nCe := #Ne+nNe;
+    nVo := #Ce+nCe;
+    nNo := #Vo+nVo;
+    nCo := #No+nNo;
+    // Find multiplication wrt the basis bas
+    basmult := BulkMultiply(Anew`mult, bas, bas);
+
+    // The even space is spanned by
+    // W_e@WtoWnew_mat + (VeCe + NeCe) + (VoCo + NoCo) + NeNe + NoNo + CeCe + CoCo
+
+    // Of these, the ones which must be linearly independent are anything without N
+    // W_e@WtoWnew_mat + VeCe + VoCo + CeCe + CoCo
+
+    even_pairs := [ <j,k> : k in [nCe..nVo-1], j in [nVe..nNe-1]]
+          cat [ <j,k> : k in [nCo..#bas], j in [nVo..nNo-1]]
+          cat [ <j,k> : k in [nCe..j], j in [nCe..nVo-1]]
+          cat [ <j,k> : k in [nCo..j], j in [nCo..#bas]];
+
+    even := FastMatrix(Basis(A`axes[i]`even[evens]), WtoWnew_mat)
+          cat [ basmult[t[1], t[2]] : t in even_pairs];
+
+    assert IsIndependent(even);
+
+    // These could have linear depedences with the above
+    // NeCe + NoCo + NeNe + NoNo
+    even_poss_pairs := [ <j,k> : k in [nCe..nVo-1], j in [nNe..nCe-1]]
+          cat [ <j,k> : k in [nCo..#bas], j in [nNo..nCo-1]]
+          cat [ <j,k> : k in [nNe..j], j in [nNe..nCe-1]]
+          cat [ <j,k> : k in [nNo..j], j in [nNo..nCo-1]];
+
+    even_poss := [ basmult[t[1], t[2]] : t in even_poss_pairs];
+
+    for j in [1..#even_poss_pairs] do
+      if IsIndependent(even cat even_poss[j]) then
+        Append(~even, even_poss[j]);
+        Append(~even_pairs, even_poss_pairs[j]);
+      end if;
+    end for;
+
+    Anew`axes[i]`even[evens] := sub<Wnew | even>;
+
+    // For odd, we do not need to keep track of the pairs which give the basis vectors, so we just build all in the same way as above
+    // W_o@WtoWnew_mat + (VeCo + NeCo) + (VoCe + NoCe) + (NeNo + NeCo + CeCo)
+    odd := FastMatrix(Basis(A`axes[i]`odd[odds]), WtoWnew_mat)
+          cat &cat[ basmult[i][nCo..#bas] : i in [nVe..nCe-1]]
+          cat &cat[ basmult[i][nCe..nVo-1] : i in [nVo..nCo-1]]
+          cat &cat[ basmult[i][nNe..nVo-1] : i in [nNo..#bas]];
+
+    Anew`axes[i]`odd[odds] := sub<Wnew | odd>;
+
     // We do the w*h-w trick
     H := A`axes[i]`stab;
     Aactionhom := GModuleAction(A`Wmod);
+        
+    // precompute the images of all the basis vectors in the basis of bas
+    Mbas := Matrix(bas);
+    Minv := Mbas^-1;
+    images := [ Mbas*h@Aactionhom*Minv : h in H | h ne H!1];
+
+    // All the vectors from W_even have already had the w*h-w trick imposed, so don't need to do these.  We only need to do those given by even_pairs.
+
+    // If w^h = w^g for some h and g, we only need to take one.  Also, since multipication is commutative, we may take any order on the pair which give w.
+
+    function CommonRows(t)
+      return Setseq({Sort([L[t[1]], L[t[2]]]) : L in images });
+    end function;
+
+    // We build all pairs and sort them so that they are in blocks with common 1st vector.
+    image_pairs := [ CommonRows(t) : t in even_pairs ];
+    lens := [#S : S in image_pairs];
+
+    image_pairs := &cat image_pairs;
+    Sort(~image_pairs, func<x,y| x[1] eq y[1] select 0 else x[1] lt y[1] select 1 else -1>, ~perm);
+
+    // We maintain the order on the w's
+    ws := &cat [ [ basmult[t[1],t[2]] where t := even_pairs[k] : j in [1..lens[k]]] : k in [1..#even_pairs]];
+    ws := [ws[i^perm] : i in [1..#ws]];
     
-    // if this is slow, we can speed up by picking a good basis for the even part of Anew and pulling it back to pairs.
-    // Also, try to create chains of basis vectors with action of H
+    vprintf ParAxlAlg, 4: "There are %o pairs to process.\n", #ws;
     
-    // precompute the images of all the basis vectors
-    images := [ FastMatrix(bas_even cat bas_odd,h@Aactionhom) : h in H | h ne H!1];
+    if #ws lt 10000 then
+      // We just do the easy thing
+      whs := [ &+[ L[1,j]*L[2,k]*basmult[j, k] : j in Support(L[1]), k in Support(L[2]) ] : L in image_pairs];
+    else
+      // We take blocks of all the same first vector and use matrix multiplication
+      // This is slower for small numbers but quicker for more.
+      // Slower for 8000 pairs (S_6 dim 151), but quicker for 47000 pairs (S_6 dim 9797)
+
+      whs := [];
+      start := 1;
+      time while exists(last){j-1 : j in [start..#image_pairs] | image_pairs[start,1] ne image_pairs[j,1]} do
+        whs cat:= Flat(BulkMultiply(basmult, [image_pairs[start,1]],
+                  [image_pairs[j,2] : j in [start..last]]));
+        start := last + 1;
+      end while;
+      whs cat:= Flat(BulkMultiply(basmult, [image_pairs[start,1]],
+                  [image_pairs[j,2] : j in [start..#image_pairs]]));
+    end if;
     
-    // We now need to convert these images and find their products in Anew.
-    im_even := [ [Coordinates(A`axes[i]`even[evens], v) : v in L[1..#bas_even]] : L in images];
-    im_odd := [ [Coordinates(A`axes[i]`odd[odds], v) : v in L[#bas_even+1..#bas_even+#bas_odd]] : L in images];
-    
-    prods_even := [ BulkMultiply(EvenxEven, L, L) : L in im_even];
-    prods_odd := [ BulkMultiply(OddxOdd, L, L) : L in im_odd];
-    
-    // Each w in Anew`even is represented by a tuple <u,v> and we have precomputed their products and also u*h, so we just run over k,j symmetrically
-    vects_even := [ [ M[k,j] - EvenxEven[k,j] :j in [1..k], k in [1..#bas_even]] : M in prods_even];
-    vects_odd := [ [ M[k,j] - OddxOdd[k,j] :j in [1..k], k in [1..#bas_odd]] : M in prods_odd];
-    
-    Anew`axes[i]`even[evens diff {1}] +:= sub<Wnew | Flat(vects_even) cat Flat(vects_odd)>;
+    Anew`axes[i]`even[evens diff {1}] +:= sub<Wnew | [ whs[j]-ws[j] : j in [1..#ws]]>;
   end for;
   vprintf ParAxlAlg, 4: "  Time taken for the odd and even parts %o.\n", Cputime(tt);
 
@@ -715,11 +756,7 @@ intrinsic ExpandSpace(A::ParAxlAlg: implement := true) -> ParAxlAlg, Map
   // We also collect some relations coming from the eigenvectors
   vprint ParAxlAlg, 2: "  Collecting any new eigenvalue relations.";
   tt := Cputime();
-  for i in [1..#A`axes] do
-    for lambda in Anew`fusion_table`eigenvalues do // could skip 1
-      Anew := ImposeEigenvalue(Anew, i, lambda: implement:=false);
-    end for;
-  end for;
+  Anew := ImposeEigenvalues(Anew: implement := false);
   vprintf ParAxlAlg, 4: "Time taken %o.\n", Cputime(tt);
 
   if implement then
@@ -742,14 +779,56 @@ This is an internal function to impose the eigenvalue condition.
 NB add Timesable
 
 */
+intrinsic ImposeEigenvalues(A::ParAxlAlg: implement:=true) -> ParAxlAlg
+  {
+  This imposes the relation u*a - lambda u, for all u in U, where U is the eigenspace associated to lambda and a is an axis.
+  }
+  W := A`W;
+  V := A`V;
 
+  Ggr, gr := Grading(A`fusion_table); 
+  require Order(Ggr) in {1,2}: "The fusion table is not Z_2-graded.";
+  
+  evens := {@ lambda : lambda in A`fusion_table`eigenvalues | lambda@gr eq Ggr!1 @};
+  odds := {@ lambda : lambda in A`fusion_table`eigenvalues | lambda@gr eq Ggr.1 @};
+  lambdas := evens join odds;
+
+  newrels := {@ W| @};
+  for i in [1..#A`axes] do
+    // It is cheaper to do all multiplications in one go and then sort out afterwards
+    eigsps := [ Basis(A`axes[i]`even[{@lambda@}] meet V) : lambda in evens]
+           cat [ Basis(A`axes[i]`odd[{@lambda@}] meet V) : lambda in odds];
+    dims := [#sp : sp in eigsps];
+    eigsps := &cat eigsps;
+    
+    mults := BulkMultiply(A, [A`axes[i]`id`elt], eigsps)[1];
+  
+    newrels join:= {@ W | w  : s in [(&+dims[1..j-1]+1)..&+dims[1..j]], j in [1..#lambdas] |
+             not IsZero(w) where w := mults[s] - lambdas[j]*eigsps[s] @};
+  end for;
+  
+  rels_sub := sub<A`W | A`rels>;
+  newrels_sub := sub<A`W | newrels>;
+  int := newrels_sub meet rels_sub;
+  bas := ExtendBasis(int, newrels_sub);
+  U := GInvariantSubspace(A`Wmod, A`W, bas[Dimension(int)+1..#bas]);
+
+  A`rels join:= {@ W| w : w in Basis(U)@};
+
+  if implement then
+    return ImplementRelations(A);
+  else
+    return A;
+  end if;
+end intrinsic;
+/*
 intrinsic ImposeEigenvalue(A::ParAxlAlg, i::RngIntElt, lambda::.: implement:=true) -> ParAxlAlg
   {
   Let id be the ith idempotent in W and lambda an eigenvalue.  This imposes the relation u*e - lambda u, for all u in U, where U is the eigenspace associated to lambda.
   }
   W := A`W;
-  id := A`axes[i]`id;
   V := A`V;
+  id := A`axes[i]`id;
   if {@ lambda @} in Keys(A`axes[i]`odd) then
     U := A`axes[i]`odd[{@ lambda @}];
   elif {@ lambda @} in Keys(A`axes[i]`even) then
@@ -774,6 +853,7 @@ intrinsic ImposeEigenvalue(A::ParAxlAlg, i::RngIntElt, lambda::.: implement:=tru
     return A;
   end if;
 end intrinsic;
+*/
 /*
 
 This just finds the odd and even parts acording to the grading.
@@ -1053,9 +1133,8 @@ intrinsic ExpandEven(A::ParAxlAlg: implement:=true, backtrack := false, reductio
     if not so or (implement and Dimension(A`axes[i]`even[{@@}]) ge reduction_limit) then
     
       // Find which empty eigenspaces are not G-invariant
-      dims_empty := [ Dimension(A`axes[j]`even[{}]) : j in [1..#A`axes]];
       altered_empties := {j : j in [1..#A`axes] | 
-               Dimension(A`axes[j]`even[{@@}]) notin {0, dims_empty[j]}};
+               Dimension(A`axes[j]`even[{@@}]) notin {0, stage_flag[j, 5, 1]}};
       U := GInvariantSubspace(A`Wmod, A`W, 
                &cat[ Basis(A`axes[j]`even[{@@}]) : j in altered_empties]);
       

@@ -3,6 +3,8 @@
 =========== Code to find Frobenius form =============
 
 */
+import "ParAxlAlg_initial.m": EigenvalueSort;
+
 function ShiftProducts(L,M)
   if Type(L) eq RngIntElt then
     return [*L*],M;
@@ -175,9 +177,15 @@ intrinsic HasFrobeniusForm(A::ParAxlAlg) -> BoolElt, AlgMatElt, RngIntElt
   // We now build the Frobenius form with respect to our basis.
 
   // precompute the bases for each axis
-  // ***Correct for general axial algebras***
+  max_size := Max([#S : S in Keys(A`axes[1]`even)]);
+  assert exists(evens){S : S in Keys(A`axes[1]`even) | #S eq max_size};
+  max_size := Max([#S : S in Keys(A`axes[1]`odd)]);
+  assert exists(odds){S : S in Keys(A`axes[1]`odd) | #S eq max_size};
+  
+  evens := [ {@ s @} : s in Sort(evens, EigenvalueSort)];
+  odds := [ {@ s @} : s in Sort(odds, EigenvalueSort)];
   actionhom := GModuleAction(A`Wmod);
-  Axbas := [ &cat[ Basis(A`axes[i]`even[k]) : k in [{@1@}, {@0@}, {@1/4@}]] cat Basis(A`axes[i]`odd[{@1/32@}]) : i in [1..#A`axes] ];
+  Axbas := [ &cat[ Basis(A`axes[i]`even[k]) : k in evens] cat &cat[ Basis(A`axes[i]`odd[k]): k in odds] : i in [1..#A`axes] ];
   Axbas := [ RSpaceWithBasis(FastMatrix(Axbas[i], g@actionhom)) : g in conjs[i], i in [1..#Axbas]];
 
   form := [[] : i in [1..#bas]];

@@ -93,7 +93,8 @@ intrinsic PartialExpandSpace(A::ParAxlAlg, U::ModTupFld) -> ParAxlAlg, Map
   
   require not U subset (sub<W|A`rels> + V): "There is nothing to expand by.";
   
-  vprint ParAxlAlg, 2: "  Partially expanding.";
+  vprintf ParAxlAlg, 1: "Partially expanding space from %o dimensions.\n", Dimension(A);
+  tt := Cputime();
   // ensure that U is G-invariant
   U := GInvariantSubspace(Wmod, W, {@ W!u : u in Basis(U)@});
   
@@ -136,7 +137,8 @@ intrinsic PartialExpandSpace(A::ParAxlAlg, U::ModTupFld) -> ParAxlAlg, Map
   Anew`Wmod := Wmodnew;
   Anew`W := Wnew;
   Anew`V := (VX)@WtoWnew;
-
+  vprintf ParAxlAlg, 4: "Time taken to build modules and vector spaces %o.\n", Cputime(tt);
+  
   vprint ParAxlAlg, 2: "  Building the multiplication.";
   tt := Cputime();
   
@@ -319,11 +321,7 @@ intrinsic PartialExpandSpace(A::ParAxlAlg, U::ModTupFld) -> ParAxlAlg, Map
   // We also collect some relations coming from the eigenvectors
   vprint ParAxlAlg, 2: "  Collecting any new eigenvalue relations.";
   tt := Cputime();
-  for i in [1..#A`axes] do
-    for lambda in Anew`fusion_table`eigenvalues do // could skip 1
-      Anew := ImposeEigenvalue(Anew, i, lambda: implement:=false);
-    end for;
-  end for;
+  Anew := ImposeEigenvalues(Anew: implement:=false);
   vprintf ParAxlAlg, 4: "Time taken %o.\n", Cputime(tt);
 
   vprintf ParAxlAlg, 4: "Total time taken to partial expand space (before ImplementRelations) %o\n", Cputime(t);
