@@ -44,6 +44,34 @@ intrinsic Print(T::FusTab)
 end intrinsic;
 /*
 
+Changes the field for the fusion table.
+
+*/
+intrinsic ChangeField(T::FusTab, F::Fld) -> FusTab
+  {
+  Changes the field of definition of the fusion table.  Checks that the eigenvalues do not collapse.
+  
+  Note that we need to be able to coerce any scalars into the new field.  For example, the rationals to a finite field is ok, but not the other way.
+ }
+  Tnew := New(FusTab);
+  Tnew`eigenvalues := ChangeUniverse(T`eigenvalues, F);
+  require #Tnew`eigenvalues eq #T`eigenvalues: "Changing field collapses some eigenvalues.";
+  
+  Tnew`table := [ [ ChangeUniverse(S, F) : S in row] : row in T`table];
+  
+  if assigned T`group then
+    Tnew`group := T`group;
+    Tnew`grading := map< Tnew`eigenvalues -> Tnew`group | i:-> T`eigenvalues[Position(Tnew`eigenvalues, i)] @T`grading>;
+  end if;
+  
+  if assigned T`useful then
+    Tnew`useful := {@ < ChangeUniverse(tup[i], F) : i in [1..3]> : tup in T`useful @};
+  end if;
+  
+  return Tnew;
+end intrinsic;
+/*
+
 Calculates the grading for the table.
 
 */
@@ -157,6 +185,22 @@ intrinsic MonsterFusionTable() -> FusTab
   T := New(FusTab);
   T`eigenvalues := {@ 1, 0, 1/4, 1/32 @};
   T`table := [[ {@1@}, {@ @}, {@1/4@}, {@1/32@}], [ {@@}, {@ 0 @}, {@1/4@}, {@1/32@}], [ {@1/4@}, {@1/4 @}, {@1,0@}, {@1/32@}], [ {@1/32@}, {@1/32@}, {@1/32@}, {@1,0,1/4@}]];
+  _ := UsefulFusionRules(T);
+  
+  return T;
+end intrinsic;
+/*
+
+Returns the Ising type table.
+
+*/
+intrinsic IsingTypeFusionTable(alpha::FldRatElt, beta::FldRatElt) -> FusTab
+  {
+  Returns the fusion table of Ising type alpha, beta.
+  }
+  T := New(FusTab);
+  T`eigenvalues := {@ 1, 0, alpha, beta @};
+  T`table := [[ {@1@}, {@ @}, {@alpha@}, {@beta@}], [ {@@}, {@ 0 @}, {@alpha@}, {@beta@}], [ {@alpha@}, {@alpha @}, {@1,0@}, {@beta@}], [ {@beta@}, {@beta@}, {@beta@}, {@1,0,alpha@}]];
   _ := UsefulFusionRules(T);
   
   return T;

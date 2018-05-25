@@ -528,7 +528,6 @@ intrinsic MaximalGluingSubalgebras(Ax::GSet, tau::Map, shape::SeqEnum: field := 
   The function also returns a set of flags showing which shapes have been covered by the subalgebras.
   }
   G := Group(Ax);
-  groups := ls(Sprintf("library/%m", field));
   maxes := [G] cat [ rec`subgroup : rec in MaximalSubgroups(G)];
   
   maxsubalgs := [* *];

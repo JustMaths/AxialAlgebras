@@ -1018,9 +1018,8 @@ StageDimensions := function(A, i)
   return CheckEigenspaceDimensions(A:empty:=true)[i];
 end function;
 
-SetPrevious := function(stage)
-  // currently hardcoded for Monster fusion rules!
-  orderedsubsets := [ {@@}, {@ 1 @}, {@ 0 @}, {@ 1/4 @}, {@ 1, 0 @}, {@ 1, 1/4 @}, {@ 0, 1/4 @}, {@ 1, 0, 1/4 @}, {@1/32@}];
+SetPrevious := function(orderedsubsets, stage)
+  
   return AssociativeArray([* < orderedsubsets[i], stage[i]> : i in [1..#stage]*]);
 end function;
 /*
@@ -1061,7 +1060,13 @@ intrinsic ExpandEven(A::ParAxlAlg: implement:=true, backtrack := false, reductio
   len := #StageDimensions(A, 1);
   stage_flag := [[ [ -1 : k in [1..len]] : j in [1..5]] : i in [1..#A`axes]];
   
-  // We only wish to do the wh-w trick once per ExpandSubspace, so we do it first
+  // We define the set of ordered subsets
+  Ggr, gr := Grading(A`fusion_table); 
+  require Order(Ggr) in {1,2}: "The fusion table is not Z_2-graded.";
+  
+  evens := {@ lambda : lambda in A`fusion_table`eigenvalues | lambda@gr eq Ggr!1 @};
+  odds := {@ lambda : lambda in A`fusion_table`eigenvalues | lambda@gr eq Ggr.1 @};
+  orderedsubsets := Subsets(evens) join Subsets(odds: empty:=false);
   
   while true do
     // We find the lowest stage so that there is an axis which has changed since we last worked on it.
@@ -1082,22 +1087,22 @@ intrinsic ExpandEven(A::ParAxlAlg: implement:=true, backtrack := false, reductio
 
       // We begin by multplying down
       if stage eq 1 then
-        A := MultiplyDown(A, keys, i: previous:= SetPrevious(stage_flag[i,stage]));
+        A := MultiplyDown(A, keys, i: previous:= SetPrevious(orderedsubsets, stage_flag[i,stage]));
         stage_flag[i, stage] := StageDimensions(A, i);
 
       // We sum up the subspaces
       elif stage eq 2 then
-        A := SumUpwards(A, keys, i: previous:= SetPrevious(stage_flag[i,stage]));
+        A := SumUpwards(A, keys, i: previous:= SetPrevious(orderedsubsets, stage_flag[i,stage]));
         stage_flag[i, stage] := StageDimensions(A, i);
         
       // We take intersections
       elif stage eq 3 then
-        A := IntersectionDown(A, keys, i: previous:= SetPrevious(stage_flag[i,stage]));
+        A := IntersectionDown(A, keys, i: previous:= SetPrevious(orderedsubsets, stage_flag[i,stage]));
         stage_flag[i, stage] := StageDimensions(A, i);
         
       // We apply the useful fusion rules
       elif stage eq 4 then
-        A := ApplyUsefulFusionRules(A, i: previous := SetPrevious(stage_flag[i,stage]));
+        A := ApplyUsefulFusionRules(A, i: previous := SetPrevious(orderedsubsets, stage_flag[i,stage]));
         stage_flag[i, stage] := StageDimensions(A, i);
         
       // All the operations we apply above are H-invariant

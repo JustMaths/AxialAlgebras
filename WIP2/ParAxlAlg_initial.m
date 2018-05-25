@@ -3,6 +3,8 @@
 Functions for creating an initial object
 
 */
+import "ParAxlAlg.m": library_location;
+
 QQ := Rationals();
 /*
 
@@ -39,7 +41,7 @@ intrinsic PartialAxialAlgebra(L::List: fusion_table := MonsterFusionTable(), max
 end intrinsic;
 /*
 
-Build an initial partial algebra but only for basic algebras atm...
+Build an initial partial algebra
 
 */
 intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_table := MonsterFusionTable(), maximal_subgroups:=true, partial := false, field:= QQ) -> ParAxlAlg
@@ -59,6 +61,9 @@ intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_tab
   A`tau := tau;
   A`shape := shape;
   A`number_of_axes := #Ax;
+  if IsFinite(field) then
+    fusion_table := ChangeField(fusion_table, field);
+  end if;
   A`fusion_table := fusion_table;
   G := Group(Ax);
 
@@ -139,7 +144,12 @@ intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_tab
     subsp := RSpaceWithBasis([ A`W.i : i in orb]);
     subalgs`subsps cat:= [* subsp *];
 
-    alg := LoadPartialAxialAlgebra(Sprintf("library/%m/basic_algebras/%o", field, type));
+    path := Sprintf("%o/%m/basic_algebras/%o", library_location, BaseField(A), type);
+    if ExistsPath(path) then
+      alg := LoadPartialAxialAlgebra(path);
+    else
+      alg := ChangeField(LoadPartialAxialAlgebra(Sprintf("%o/RationalField()/basic_algebras/%o", library_location, type)), field);
+    end if;
     if alg in subalgs`algs then
       pos := Position(subalgs`algs, alg);
     else
@@ -322,8 +332,8 @@ intrinsic UpdateAxes(A::ParAxlAlg, ~Anew::ParAxlAlg, psi::Map: matrix := Matrix(
 
   // We collect up all the basis vectors for all the eigenspaces and find their images all at once
   allkeys := AssociativeArray();
-  allkeys["even"] := [{@ @}, {@ 1 @}, {@ 0 @}, {@ 1/4 @}, {@ 1, 0 @}, {@ 1, 1/4 @}, {@ 0, 1/4 @}, {@ 1, 0, 1/4 @}];
-  allkeys["odd"] := [{@ 1/32 @}];
+  allkeys["even"] := IndexedSet(Keys(A`axes[1]`even));
+  allkeys["odd"] := IndexedSet(Keys(A`axes[1]`odd));
   L := &cat[ Basis(A`axes[i]``attr[k]) : k in allkeys[attr], attr in ["even", "odd"], i in [1..#A`axes]];
   
   images := FastFunction(L, psi: matrix:=matrix);
@@ -406,6 +416,7 @@ intrinsic PullbackEigenvaluesAndRelations(A::ParAxlAlg, ~Anew::ParAxlAlg: force_
   
   G := Group(Anew);
   Wnew := Anew`W;
+  all_axes := Image(Anew`GSet_to_axes);
   
   for i in [1..#Anew`subalgs`subsps] do
     newmap, homg, pos := Explode(Anew`subalgs`maps[i]);
@@ -440,10 +451,10 @@ intrinsic PullbackEigenvaluesAndRelations(A::ParAxlAlg, ~Anew::ParAxlAlg: force_
     // NB Im_sp is a H-submodule of alg, where H = Group(alg).  If an axis id of A is conjugate to an axis of alg by g, then the double coset KgH, where K = Stab(id) are all the elements which conjugate id to an axis of alg (of a given type). There could be additional outer automorphisms of alg induced by G, but we would see these in A and they would just fuse classes of axes in alg.  So, we need only find a single g to conjugate the eigenspaces.
 
     if not assigned axes then
-      axes := [ Position(Image(Anew`GSet_to_axes), Anew`axes[j]`id`elt) : j in [1..#Anew`axes]];
+      axes := [ Position(all_axes, Anew`axes[j]`id`elt) : j in [1..#Anew`axes]];
     end if;
     
-    alg_axes := [ Position(Image(Anew`GSet_to_axes), alg`axes[j]`id`elt@@newmap) : j in [1..#alg`axes]];
+    alg_axes := [ [j : j in [1..#all_axes] | all_axes[j] in Domain(newmap) and all_axes[j]@newmap eq alg`axes[k]`id`elt][1] : k in [1..#alg`axes]];
     
     // S is a set of tuples <j,k,g>, where the jth axis of Anew conjugates via g to the k^th axis of alg
     S := {@ <j,k,g> : j in [1..#Anew`axes], k in [1..#alg`axes] | so

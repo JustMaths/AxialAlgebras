@@ -123,6 +123,78 @@ end intrinsic;
 */
 /*
 
+============== Functions on ParAxlAlgs ===============
+
+*/
+/*
+
+Changes the field for a partial axial algebra
+
+*/
+intrinsic ChangeField(A::ParAxlAlg, F::Fld) -> ParAxlAlg
+  {
+  Changes the field of definition of the partial axial algebra.  Checks that the eigenvalues do not collapse.
+  
+  Note that we need to be able to coerce any scalars into the new field.  For example, the rationals to a finite field is ok, but not the other way.
+  }
+  new_fusion_table := ChangeField(A`fusion_table, F);
+  
+  Anew := New(ParAxlAlg);
+  Anew`Wmod := ChangeRing(A`Wmod, F);
+  Wnew := ChangeRing(A`W, F);
+  Anew`W := Wnew;
+  // Doing ChangeRing sometimes changes the order of the basis elements.
+  Anew`V := sub<Wnew | ChangeUniverse(Basis(A`V), Wnew)>;
+  if assigned A`mult then
+    Anew`mult := [ ChangeUniverse(row, Anew`W) : row in A`mult];
+  end if;
+  Anew`GSet := A`GSet;
+  Anew`tau := A`tau;
+  Anew`shape := A`shape;
+  Anew`GSet_to_axes := map<Anew`GSet -> Anew`W | i:-> i@A`GSet_to_axes>;
+  Anew`number_of_axes := A`number_of_axes;
+  Anew`fusion_table := new_fusion_table;
+  
+  if assigned A`subalgs then
+    subalgs := New(SubAlg);
+    subalgs`subsps := [* sub<Wnew | ChangeUniverse(Basis(U), Wnew)> : U in A`subalgs`subsps *];
+    subalgs`algs := {@ ChangeField(alg, F) : alg in A`subalgs`algs @};
+    subalgs`maps := [* < 
+       hom< subalgs`subsps[i] -> subalgs`algs[tup[3]]`W | 
+           [ < subalgs`subsps[i].j, ChangeRing(A`subalgs`subsps[i].j@tup[1], F)> : j in [1..Dimension(A`subalgs`subsps[i])]]>, 
+         tup[2], tup[3] >
+     where tup := A`subalgs`maps[i] : i in [1..#A`subalgs`maps] *];
+   Anew`subalgs := subalgs;
+  end if;
+  
+  if assigned A`axes then
+    axes := [];
+    for i in [1..#A`axes] do
+      axis := New(AxlAxis);
+      axis`id := Anew!ChangeRing(A`axes[i]`id`elt, F);
+      axis`stab := A`axes[i]`stab;
+      axis`inv := A`axes[i]`inv;
+      axis`even := AssociativeArray();
+      axis`odd := AssociativeArray();
+      
+      for attr in ["odd", "even"] do
+        for key in Keys(A`axes[i]``attr) do
+          axis``attr[ChangeUniverse(key, F)] := ChangeRing(A`axes[i]``attr[key], F);
+        end for;
+      end for;
+      Append(~axes, axis);
+    end for;
+    Anew`axes := axes;
+  end if;
+  
+  if assigned A`rels then
+    Anew`rels := ChangeUniverse(A`rels, Wnew);
+  end if;
+
+  return Anew;
+end intrinsic;
+/*
+
 m-closed
 
 */
@@ -449,24 +521,50 @@ end intrinsic;
 ============== Dimensions of all the eigenspaces ===============
 
 */
+intrinsic Subsets(S::SetIndx:empty := true) -> SetIndx
+  {
+  Returns the subsets of S orders by length and lexicographically wrt S
+  }
+  S_Sort := func<x,y | Position(S, x) - Position(S, y)>;
+  function sub_Sort(x,y)
+    if #x-#y ne 0 then
+      return #x-#y;
+    elif x eq y then
+      return 0;
+    else
+      assert exists(i){i : i in [1..#x] | x[i] ne y[i]};
+      return Position(S, x[i]) - Position(S, y[i]);
+    end if;
+  end function;
+  
+  subsets := Subsets(Set(S));
+  if not empty then
+    subsets diff:= {{}};
+  end if;
+  
+  return Sort({@ Sort(IndexedSet(T), S_Sort) : T in subsets @}, sub_Sort);
+end intrinsic;
+
 intrinsic CheckEigenspaceDimensions(A::ParAxlAlg: U := A`W, empty := false) -> SeqEnum
   {
   Returns the dimensions of the eigenspaces for the idempotents.  Optional argument for intersecting all eigenspaces with U.
   }
-  out := [ ];
   if not assigned A`axes then
     return [];
   end if;
-  W := A`W;
-  for i in [1..#A`axes] do
-    subsets := {@ {@ 1 @}, {@ 0 @}, {@ 1/4 @}, {@ 1, 0 @}, {@ 1, 1/4 @}, {@ 0, 1/4 @}, {@ 1, 0, 1/4 @} @};
-    if empty then
-      subsets := {@ {@@} @} join subsets;
-    end if;
-    Append(~out, [ Dimension(U meet A`axes[i]`even[s]) : s in subsets ]);
-    Append(~out[i], Dimension(U meet A`axes[i]`odd[{@1/32@}]));
-  end for;
-  return out;
+  
+  // find the even and off subspaces
+  Ggr, gr := Grading(A`fusion_table); 
+  require Order(Ggr) in {1,2}: "The fusion table is not Z_2-graded.";
+  
+  evens := {@ lambda : lambda in A`fusion_table`eigenvalues | lambda@gr eq Ggr!1 @};
+  odds := {@ lambda : lambda in A`fusion_table`eigenvalues | lambda@gr eq Ggr.1 @};
+  even_subs := Subsets(evens: empty := empty);
+  odd_subs := Subsets(odds: empty:=false);
+  
+  return [ [ Dimension(U meet A`axes[i]`even[s]) : s in even_subs ] 
+       cat [ Dimension(U meet A`axes[i]`odd[s]) : s in odd_subs ] 
+         : i in [1..#A`axes]];
 end intrinsic;
 /*
 
