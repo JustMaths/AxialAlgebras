@@ -14,8 +14,11 @@ declare attributes ParAxlAlg:
   Wmod,           // A G-module representing the same vector space
   V,              // A vectorspace on which we know how to multiply
   mult,           // SeqEnum Multiplication table for V whose entries are ModTupFldElts
-  shape,          // A SetIndx of tuples < S, type> where S is a SetIndx of all axes in the
-                  // subalgebra of shape type.
+  GSet,           // The GSet of the axes
+  tau,            // A map from the GSet to involutions in G
+  shape,          // A SeqEnum of tuples < S, type> where S is a SetIndx of all axes in the
+                  // subalgebra of shape type. We assume that the first two generate the subalgebra.
+  GSet_to_axes,   // A map from the GSet to the elements of W which represent the axes
   number_of_axes, // The number of axes, which are always the last basis elements of W
   fusion_table,   // A FusTab which is the fusion table
   subalgs,        // A SubAlg
@@ -29,9 +32,9 @@ declare attributes ParAxlAlgElt:
 declare type SubAlg;
 
 declare attributes SubAlg:
-  subsps,         // A SetIndx of vector (sub)spaces
+  subsps,         // A List of vector (sub)spaces
   maps,           // A List of tups < map, homg, j>, where map: subsps -> algs[j]`W is a hom
-                  // and homg: Group(alg) -> Group(A) is a group hom
+                  // and homg: Group(A) -> Group(alg) is a group hom
   algs;           // A SetIndx of partial algebras
 
 declare type AxlAxis;
@@ -40,12 +43,8 @@ declare attributes AxlAxis:
   id,             // ParAxlAlgElt which is the idempotent
   stab,           // A GrpPerm which is the stabiliser of the axis
   inv,            // A GrpPermElt which is the Miyamoto involution in stab
-  WH,             // ModGrp W as a H-module where H=stab
   even,           // Assoc of sums of even eigenspaces
   odd;            // Assoc of odd eigenspace
-
-// id should be a ParAxlAlgElt...
-
 /*
 
 Programming note to self:
@@ -55,31 +54,44 @@ you can just coerce to move between vector spaces and G-modules
 */
 declare verbose ParAxlAlg, 4;
 
+intrinsic Hash(T::Tup) -> RngIntElt
+  {
+  }
+  return &+[Hash(t) : t in T];
+end intrinsic;
+
+intrinsic Hash(T::List) -> RngIntElt
+  {
+  }
+  return 1;
+end intrinsic;
 intrinsic 'eq'(A::Assoc, B::Assoc) -> BoolElt
   {
   Equality for AssociativeArrays.
   }
   return (Universe(A) cmpeq Universe(B)) and (Keys(A) eq Keys(B)) and forall{ k : k in Keys(A) | A[k] cmpeq B[k] };
 end intrinsic;
-
-/*
-
-intrinsics for partial axial algebras
-
-*/
+//
+//
+// =============== PROPERTIES OF ParAxlAlgs =================
+//
+//
 intrinsic Print(A::ParAxlAlg)
   {
   Prints a partial axial algebra.
   }
-  if assigned A`W and assigned A`V and assigned A`axes and assigned A`shape and assigned A`number_of_axes then
+  if assigned A`W and assigned A`V and assigned A`axes then
     printf "Partial axial algebra of shape %o, dimension %o, with known multiplication of dimension %o and %o axes in %o class%o", &cat [sh[2] : sh in A`shape], Dimension(A`W), Dimension(A`V), A`number_of_axes, #A`axes, #A`axes eq 1 select "" else "es";
-  elif assigned A`W and assigned A`V and assigned A`shape and assigned A`number_of_axes then
-    printf "Partial axial algebra of shape %o, dimension %o, with known multiplication of dimension %o and %o axes", &cat [sh[2] : sh in A`shape], Dimension(A`W), Dimension(A`V), A`number_of_axes;
   elif assigned A`W and assigned A`V then
-    printf "Partial axial algebra of dimension %o, with known multiplication of dimension %o", Dimension(A`W), Dimension(A`V);
-  elif assigned A`W then
-    printf "Partial axial algebra of dimension %o", Dimension(A`W);
+    printf "Partial axial algebra of shape %o, dimension %o, with known multiplication of dimension %o and %o axes", &cat [sh[2] : sh in A`shape], Dimension(A`W), Dimension(A`V), A`number_of_axes;
   end if;
+end intrinsic;
+
+intrinsic Shape(A::ParAxlAlg) -> Tup
+  {
+  Returns a short form of the shape of an algebra.
+  }
+  return < A`number_of_axes, &cat[ t[2] : t in A`shape]>;
 end intrinsic;
 
 intrinsic Dimension(A::ParAxlAlg) -> RngIntElt
@@ -109,6 +121,112 @@ intrinsic Hash(A::ParAxlAlg) -> RngIntElt
   return Hash(A`W);  
 end intrinsic;
 */
+/*
+
+============== Functions on ParAxlAlgs ===============
+
+*/
+/*
+
+Changes the field for a partial axial algebra
+
+*/
+intrinsic ChangeField(A::ParAxlAlg, F::Fld) -> ParAxlAlg
+  {
+  Changes the field of definition of the partial axial algebra.  Checks that the eigenvalues do not collapse.
+  
+  Note that we need to be able to coerce any scalars into the new field.  For example, the rationals to a finite field is ok, but not the other way.
+  }
+  new_fusion_table := ChangeField(A`fusion_table, F);
+  
+  Anew := New(ParAxlAlg);
+  Anew`Wmod := ChangeRing(A`Wmod, F);
+  Wnew := ChangeRing(A`W, F);
+  Anew`W := Wnew;
+  // Doing ChangeRing sometimes changes the order of the basis elements.
+  Anew`V := sub<Wnew | ChangeUniverse(Basis(A`V), Wnew)>;
+  if assigned A`mult then
+    Anew`mult := [ ChangeUniverse(row, Anew`W) : row in A`mult];
+  end if;
+  Anew`GSet := A`GSet;
+  Anew`tau := A`tau;
+  Anew`shape := A`shape;
+  Anew`GSet_to_axes := map<Anew`GSet -> Anew`W | i:-> i@A`GSet_to_axes>;
+  Anew`number_of_axes := A`number_of_axes;
+  Anew`fusion_table := new_fusion_table;
+  
+  if assigned A`subalgs then
+    subalgs := New(SubAlg);
+    subalgs`subsps := [* sub<Wnew | ChangeUniverse(Basis(U), Wnew)> : U in A`subalgs`subsps *];
+    subalgs`algs := {@ ChangeField(alg, F) : alg in A`subalgs`algs @};
+    subalgs`maps := [* < 
+       hom< subalgs`subsps[i] -> subalgs`algs[tup[3]]`W | 
+           [ < subalgs`subsps[i].j, ChangeRing(A`subalgs`subsps[i].j@tup[1], F)> : j in [1..Dimension(A`subalgs`subsps[i])]]>, 
+         tup[2], tup[3] >
+     where tup := A`subalgs`maps[i] : i in [1..#A`subalgs`maps] *];
+   Anew`subalgs := subalgs;
+  end if;
+  
+  if assigned A`axes then
+    axes := [];
+    for i in [1..#A`axes] do
+      axis := New(AxlAxis);
+      axis`id := Anew!ChangeRing(A`axes[i]`id`elt, F);
+      axis`stab := A`axes[i]`stab;
+      axis`inv := A`axes[i]`inv;
+      axis`even := AssociativeArray();
+      axis`odd := AssociativeArray();
+      
+      for attr in ["odd", "even"] do
+        for key in Keys(A`axes[i]``attr) do
+          axis``attr[ChangeUniverse(key, F)] := ChangeRing(A`axes[i]``attr[key], F);
+        end for;
+      end for;
+      Append(~axes, axis);
+    end for;
+    Anew`axes := axes;
+  end if;
+  
+  if assigned A`rels then
+    Anew`rels := ChangeUniverse(A`rels, Wnew);
+  end if;
+
+  return Anew;
+end intrinsic;
+/*
+
+m-closed
+
+*/
+intrinsic mClosed(A::ParAxlAlg) -> RngIntElt
+  {
+  Returns the m for which the algebra is m-closed i.e. the algebra is spanned by products of the axes of length up to m.
+  }
+  require A`V eq A`W: "Can't calculate m-closed before calculating the algebra!.";
+  if Dimension(A) eq 0 then
+    return 0;
+  end if;
+  G := Group(A);
+  W := A`W;
+  axes := Setseq(Image(A`GSet_to_axes));
+
+  U := sub<W | axes>;
+  products := [axes];
+
+  m := 1;
+  while Dimension(U) ne Dimension(W) do
+    m +:=1;
+    // Multiplication is commutative, so we just need to do all pairs up to half the dimension
+    UU := sub<W| Flat([ BulkMultiply(A, products[i], products[m-i]) : i in [1..Floor(m/2)]])>;
+    Append(~products, Basis(UU));
+    U +:= UU;
+  end while;
+  
+  return m;
+end intrinsic;
+//
+// ================ EQUALITY OF ParAxlAlgs ======================
+//
 intrinsic 'eq'(A::ParAxlAlg, B::ParAxlAlg) -> BoolElt
   {}
   attrs := GetAttributes(ParAxlAlg);
@@ -155,7 +273,7 @@ intrinsic IsEqual(A::AxlAxis, B::AxlAxis) -> BoolElt
   if not forall{ attr : attr in attrs | assigned A``attr eq assigned B``attr} then
     return false;
   end if;
-  for attr in attrs diff {"WH", "id"} do
+  for attr in attrs diff {"id"} do
     if assigned A``attr and A``attr ne B``attr then
       return false;
     end if;
@@ -163,7 +281,7 @@ intrinsic IsEqual(A::AxlAxis, B::AxlAxis) -> BoolElt
   if assigned A`id and A`id`elt ne B`id`elt then
     return false;
   end if;
-  return IsEqual(A`WH, B`WH);
+  return true;
 end intrinsic;
 
 intrinsic IsEqual(A::ParAxlAlg, B::ParAxlAlg) -> BoolElt
@@ -204,11 +322,11 @@ intrinsic '.'(A::ParAxlAlg, i::RngIntElt) -> ParAxlAlgElt
   require i gt 0 and i le #bas: "Argument 2 (", i, ") should be in the range", [1..#bas];
   return Basis(A)[i];
 end intrinsic;
-/*
-
-intrinsics for partial axial algebra elements
-
-*/
+//
+//
+// =========== PARTIAL AXIAL ALGEBRA ELEMENTS =============
+//
+//
 intrinsic Parent(x::ParAxlAlgElt) -> ParAxlAlg
   {
   Parent of x.
@@ -245,6 +363,12 @@ intrinsic 'in'(x::ParAxlAlgElt, U::ModTupFld) -> BoolElt
   require U subset Parent(x)`W: "U is not a subspace of the axial algebra containing x.";
   return x`elt in U;
 end intrinsic;
+/*
+intrinsic 'in'(a:: ModTupFldElt, A::ParAxlAlg) -> BoolElt
+  {}
+  return a in A`W;
+end intrinsic;
+*/
 
 // maybe this should be a function?
 intrinsic CreateElement(A::ParAxlAlg, x::.) -> ParAxlAlgElt
@@ -303,7 +427,11 @@ intrinsic IsZero(x::ParAxlAlgElt) -> BoolElt
   }
   return IsZero(x`elt);
 end intrinsic;
-
+//
+//
+// ============ OPERATIONS FOR ELEMENTS ==============
+//
+//
 intrinsic '+'(x::ParAxlAlgElt, y::ParAxlAlgElt) -> ParAxlAlgElt
   {
   Sums x and y.
@@ -350,7 +478,7 @@ intrinsic '*'(x::ParAxlAlgElt, g::GrpPermElt) -> ParAxlAlgElt
 end intrinsic;
 /*
 
-intrinsics for subalgebras.
+============== intrinsics for subalgebras ==============
 
 */
 intrinsic 'eq'(A::SubAlg, B::SubAlg) -> BoolElt
@@ -370,7 +498,7 @@ intrinsic 'eq'(A::SubAlg, B::SubAlg) -> BoolElt
 end intrinsic;
 /*
 
-intrinsics for axes.
+================= intrinsics for axes =================
 
 */
 intrinsic 'eq'(A::AxlAxis, B::AxlAxis) -> BoolElt
@@ -389,31 +517,60 @@ intrinsic 'eq'(A::AxlAxis, B::AxlAxis) -> BoolElt
   return true;
 end intrinsic;
 /*
-intrinsic 'in'(a:: ModTupFldElt, A::ParAxlAlg) -> BoolElt
-  {}
-  return a in A`W;
-end intrinsic;
+
+============== Dimensions of all the eigenspaces ===============
+
 */
+intrinsic Subsets(S::SetIndx:empty := true) -> SetIndx
+  {
+  Returns the subsets of S orders by length and lexicographically wrt S
+  }
+  S_Sort := func<x,y | Position(S, x) - Position(S, y)>;
+  function sub_Sort(x,y)
+    if #x-#y ne 0 then
+      return #x-#y;
+    elif x eq y then
+      return 0;
+    else
+      assert exists(i){i : i in [1..#x] | x[i] ne y[i]};
+      return Position(S, x[i]) - Position(S, y[i]);
+    end if;
+  end function;
+  
+  subsets := Subsets(Set(S));
+  if not empty then
+    subsets diff:= {{}};
+  end if;
+  
+  return Sort({@ Sort(IndexedSet(T), S_Sort) : T in subsets @}, sub_Sort);
+end intrinsic;
 
 intrinsic CheckEigenspaceDimensions(A::ParAxlAlg: U := A`W, empty := false) -> SeqEnum
   {
   Returns the dimensions of the eigenspaces for the idempotents.  Optional argument for intersecting all eigenspaces with U.
   }
-  out := [ ];
   if not assigned A`axes then
     return [];
   end if;
-  W := A`W;
-  for i in [1..#A`axes] do
-    subsets := {@ {@ 1 @}, {@ 0 @}, {@ 1/4 @}, {@ 1, 0 @}, {@ 1, 1/4 @}, {@ 0, 1/4 @}, {@ 1, 0, 1/4 @} @};
-    if empty then
-      subsets := {@ {@@} @} join subsets;
-    end if;
-    Append(~out, [ Dimension(U meet A`axes[i]`even[s]) : s in subsets ]);
-    Append(~out[i], Dimension(U meet A`axes[i]`odd[{@1/32@}]));
-  end for;
-  return out;
+  
+  // find the even and off subspaces
+  Ggr, gr := Grading(A`fusion_table); 
+  require Order(Ggr) in {1,2}: "The fusion table is not Z_2-graded.";
+  
+  evens := {@ lambda : lambda in A`fusion_table`eigenvalues | lambda@gr eq Ggr!1 @};
+  odds := {@ lambda : lambda in A`fusion_table`eigenvalues | lambda@gr eq Ggr.1 @};
+  even_subs := Subsets(evens: empty := empty);
+  odd_subs := Subsets(odds: empty:=false);
+  
+  return [ [ Dimension(U meet A`axes[i]`even[s]) : s in even_subs ] 
+       cat [ Dimension(U meet A`axes[i]`odd[s]) : s in odd_subs ] 
+         : i in [1..#A`axes]];
 end intrinsic;
+/*
+
+=============== ALGEBRA MULTIPLICATION ==================
+
+*/
 /*
 
 Calculates the multiplication in the partial algebra for elements of V.
@@ -483,13 +640,16 @@ intrinsic IsTimesable(u::ParAxlAlgElt, v::ParAxlAlgElt) -> BoolElt, ParAxlAlgElt
   end for;
   return false, _;
 end intrinsic;
+//
+// ============= FUNCTIONS TO APPLY MAPS TO SETS OF ELMENTS ==============
+//
 /*
 
-A handy function for applying a homomorphism to a set/sequence of vectors quickly.  I think it is quicker as magma uses fast matrix multiplication???
+A handy function for applying a homomorphism to a set/sequence of vectors quickly.  I think it is quicker as magma uses fast matrix multiplication.
 
 */
 intrinsic FastFunction(L::SeqEnum, map::Map:
-   matrix := Matrix(BaseRing(Domain(map)), Dimension(Domain(map)), Dimension(Codomain(map)), [U.i@map where U := Domain(map): i in [1..Dimension(Domain(map))]])) -> SeqEnum
+   matrix := Matrix(BaseRing(Domain(map)), Dimension(Domain(map)), Dimension(Codomain(map)), [u@map : u in Basis(Domain(map))])) -> SeqEnum
   {
   Given a set or sequence of vectors and a homomorphism, returns the sequence which is the application of the map to each.  Uses matrix methods to achieve a speed up.
   }
@@ -501,7 +661,7 @@ intrinsic FastFunction(L::SeqEnum, map::Map:
 end intrinsic;
 
 intrinsic FastFunction(L::SetIndx, map::Map:
-   matrix := Matrix(BaseRing(Domain(map)), Dimension(Domain(map)), Dimension(Codomain(map)), [U.i@map where U := Domain(map): i in [1..Dimension(Domain(map))]])) -> SetIndx
+   matrix := Matrix(BaseRing(Domain(map)), Dimension(Domain(map)), Dimension(Codomain(map)), [u@map : u in Basis(Domain(map))])) -> SetIndx
   {
   Given a set or sequence of vectors and a homomorphism, returns the set which is the application of the map to each.  Uses matrix methods to achieve a speed up.
   }
@@ -677,11 +837,11 @@ intrinsic BulkMultiply(A::ParAxlAlg, L::SeqEnum, M::SeqEnum) -> SeqEnum
   end if;
   
   // We minimise the number of matrix operations.
-  if #L lt #M then
-    mult := [ FastMultiply(A, M, L[i]) : i in [1..#L]];
-    return [[ mult[i,j] : i in [1..#L]] : j in [1..#M]];
+  if #L le #M then
+    return [ FastMultiply(A, M, L[i]) : i in [1..#L]];
   else
-    return [ FastMultiply(A, L, M[i]) : i in [1..#M]];
+    mult := [ FastMultiply(A, L, M[i]) : i in [1..#M]];
+    return [[ mult[j,i] : j in [1..#M]] : i in [1..#L]];
   end if;
 end intrinsic;
 
@@ -716,57 +876,6 @@ intrinsic BulkMultiply(mult::SeqEnum, I1::SeqEnum, I2::SeqEnum) -> SeqEnum
   return [[ out[i,j] : j in [1..b] ] : i in [1..a]];
 end intrinsic;
 
-
-/*
-
-A function for returning the axes together with the tau map
-
-*/
-intrinsic Axes(A::ParAxlAlg) -> SetIndx, Map
-  {
-  Returns the set of Axes of A and the tau map from the axes to the involutions of the Miyamoto group of A.
-  }
-  all_pairs := {@ @};
-  if not assigned A`axes then
-    return {@ @}, _;
-  end if;
-  for i in [1..#A`axes] do
-    pairs := {@ <A`axes[i]`id*g, A`axes[i]`inv^g> : g in Group(A) @};
-    Sort(~pairs, func<x,y| x[1]`elt lt y[1]`elt select 1 else x[1]`elt eq y[1]`elt select 0 else -1>);
-    Include(~all_pairs, pairs);
-  end for;
-  axes := &join{@ {@ pair[1] : pair in pairs @} : pairs in all_pairs @};
-  tau := map<axes -> Group(A) | Set(&join all_pairs)>;
-  
-  return axes, tau;
-end intrinsic;
-
-
-// ***Need to correct!!***
-intrinsic mClosed(A::ParAxlAlg) -> RngIntElt
-  {
-  Need to correct!!!
-  }
-  require A`V eq A`W: "Can't calculate m-closed before calculating the algebra!.";
-  if Dimension(A) eq 0 then
-    return 0;
-  end if;
-  G := Group(A);
-  W := A`W;
-  axes := &join{@ {@ A`axes[i]`id*g : g in G @} : i in [1..#A`axes] @};
-  
-  U := sub<W|[ a`elt : a in axes]>;
-  products := axes;
-  m := 1;
-  while Dimension(U) ne Dimension(W) do
-    products := [ u*v : u in products, v in axes ];
-    U +:= sub<W| [ x`elt : x in products]>;
-    products := [ A!u : u in Basis(U)];
-    m +:=1;
-  end while;
-  
-  return m;
-end intrinsic;
 /*
 intrinsic SubConstructor(A::ParAxlAlg, tup) -> ParAxlAlg
   {}
