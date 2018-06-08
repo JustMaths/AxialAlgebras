@@ -93,6 +93,10 @@ intrinsic IsAdmissibleTauMap(Ax::GSet, tau::Map) -> BoolElt
   returns whether a tau-map is admissible or not.
   }
   G := Group(Ax);
+  if #Ax eq 1 then
+    return 1@tau eq G!1;
+  end if;
+  require IsFaithful(G, Ax): "G does not act faithfully";
   orbs := Orbits(G, Ax);
   
   // We require tau to be a tau map
@@ -138,6 +142,9 @@ intrinsic AdmissibleTauMaps(Ax::GSet) -> SeqEnum
   Given a GSet Ax, we find all the admissible tau maps up to automorphisms of the action.
   }
   G := Group(Ax);
+  if #Ax eq 1 then
+    return [map<Ax->G | i:->G!1>];
+  end if;
   orbs := Orbits(G, Ax);
 
   orb_reps := [Representative(o) : o in orbs];
@@ -383,7 +390,7 @@ intrinsic IsIsomorphic(Ax1::GSet, tau1::Map, shape1::SeqEnum, Ax2::GSet, tau2::M
   if not so then
     return false, _, _, _;
   end if;
-  homg := hom<G1 -> G2 | [<g,((g@act1)^perm)@@act2> : g in Generators(G1)]>;
+  homg := hom<G1 -> G2 | [<g,((g@act1)^perm)@@act2> : g in Generators(G1) join {G1!1}]>;
   assert forall{<i,g> : i in Ax1, g in Generators(G1) | Image(g,Ax1,i)^perm eq Image(g@homg, Ax2, i^perm)};
   
   // We form the tau map for the conjugated Ax1
@@ -410,7 +417,7 @@ intrinsic IsIsomorphic(Ax1::GSet, tau1::Map, shape1::SeqEnum, Ax2::GSet, tau2::M
   end if;
   
   perm := perm*n;
-  homg := hom<G1 -> G2 | [<g,((g@act1)^perm)@@act2> : g in Generators(G1)]>;
+  homg := hom<G1 -> G2 | [<g,((g@act1)^perm)@@act2> : g in Generators(G1) join {G1!1}]>;
   assert MapEq(tau2, map<Ax2 -> G2 | i:->(i^(perm^-1))@tau1@homg>);
   
   // Now we check to see if the shapes are the same
@@ -431,7 +438,7 @@ intrinsic IsIsomorphic(Ax1::GSet, tau1::Map, shape1::SeqEnum, Ax2::GSet, tau2::M
   end if;
   
   perm := perm*h;
-  homg := hom<G1 -> G2 | [<g,((g@act1)^perm)@@act2> : g in Generators(G1)]>;
+  homg := hom<G1 -> G2 | [<g,((g@act1)^perm)@@act2> : g in Generators(G1) join {G1!1}]>;
   assert MapEq(tau2, map<Ax2 -> G2 | i:->(i^(perm^-1))@tau1@homg>);
     
   return true, perm, homg;
