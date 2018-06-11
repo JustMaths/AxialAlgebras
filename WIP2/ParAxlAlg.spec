@@ -8,4 +8,5 @@
   FusionTable.m
   json.m
   ParAxlAlg_json.m
+  Properties.m
 }
