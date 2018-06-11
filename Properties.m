@@ -1,0 +1,178 @@
+/*
+
+Some functions for checking properties of partial axial algebras
+
+*/
+intrinsic CheckAllGroup(grp_name::MonStgElt) -> List
+  {
+  Checks all algebras with that group.
+  }
+  // magma/linux/something screws up directorynames with colons, so we sustitute
+  grp_name := Join(Split(grp_name, ":"), "#");
+  algs := LoadAllGroup(grp_name);
+  
+  props := [Properties(A) : A in algs];
+  
+  for p in [1..#props] do
+    if props[p] eq [* *] then
+      continue;
+    end if;
+    if not props[p,1] then
+      printf "%o is non-primitive.\n", algs[p];
+    end if;
+    if not props[p,2] then
+      printf "%o has no form.\n", algs[p];
+    elif not props[p,3] and props[p,4] then
+      printf "%o has a form; it is positive semidefinite but not positive definite.\n", algs[p];
+    elif not props[p,3] and not props[p,4] then
+      printf "%o has a form but it is not positive semidefinite.\n", algs[p];
+    end if;
+    for i in [1..#props[p,6]] do
+      if not props[p,6,i,2] then
+        printf "%o has failed the %o condition.\n", algs[p], props[p,6,i,1];
+      end if;
+    end for;
+  end for;
+
+  try
+    max := Maximum({ props[p,5] : p in [1..#props] | props[p] ne [* *]});
+    printf "The maximum m found was %o for the algebras %o.\n", max, 
+      { algs[p] : p in [1..#props] | props[p] ne [* *] and props[p,5] eq max};
+  catch e;
+    print "There are no non-zero algebras.";
+  end try;
+
+  return props;
+end intrinsic;
+
+intrinsic CheckAllGroup(G::GrpPerm) -> List
+  {
+  Checks all algebras with that group.
+  }
+  return CheckAllGroup(MyGroupName(G));
+end intrinsic;
+
+intrinsic Properties(A::ParAxlAlg) -> List
+  {
+  Returns a list with the following properties:
+  
+  - if it is primitive
+  - whether a form exists
+  - whether it is positive definite
+  - mimimal m for which A is m-closed
+  - whether the 2Ab, 3A, 4A, 5A conditions hold
+  }
+  if Dimension(A) eq 0 then
+    return [* *];
+  end if;
+  prim := forall{ r : r in CheckEigenspaceDimensions(A) | r[1] eq 1};
+  so, F, m := HasFrobeniusForm(A);
+  
+  if so then
+    pos := IsPositiveDefinite(F);
+    if not pos then
+      semipos := IsPositiveSemiDefinite(F);
+    else
+      semipos := pos;
+    end if;
+  else
+    pos := so;
+    semipos := pos;
+  end if;
+
+  L := CheckSubalgebraConditions(A);
+  
+  return [* prim, so, pos, semipos, m , L *];
+end intrinsic;
+
+intrinsic CheckSubalgebraConditions(A::ParAxlAlg) -> List
+  {
+  Checks the 2Ab, 3A, 4A, 5a conditions, returns a sequence of boolean and a certificate if false.
+  }
+  if Dimension(A) eq 0 then
+    return [* *];
+  end if;
+  Ax := A`GSet;
+  tau := A`tau;
+  shape := A`shape;
+  G := Group(A);
+  Ax_to_axes := A`GSet_to_axes;
+  
+  out := [* *];
+  
+  function CheckCondition(algs, object, extrabasis)
+    orbs :=  &join {@ Orbit(G, Ax, ax) : ax in algs @};
+    
+    // check whether the object being the same implies the extra basis vector is the same
+    so := false;
+    for ax in algs do
+      obj := object(ax);
+      x := extrabasis(ax);
+      
+      others := {@ t : t in orbs | t ne ax and object(t) eq obj @};
+      so := exists(cert){ p : p in others | extrabasis(p) ne x};
+      if so then
+        return [* false, <ax, cert> *];
+      end if;
+    end for;
+    return [* true *];  
+  end function;
+  
+  function rho(X)
+    return sub<G | X[1]@tau*X[2]@tau>;
+  end function;
+  
+  // Find all 2A algebras
+  if exists{sh : sh in shape | sh[2] in {"2A", "4B", "6A"} } then
+    algs := {@ sh[1] : sh in shape | sh[2] eq "2A" @} join
+              &join {@ {@ {@ sh[1,1], sh[1,3] @}, {@ sh[1,2], sh[1,4] @} @} : sh in shape | sh[2] eq "4B" @}
+              join {@ {@ sh[1,1], sh[1,4] @} : sh in shape | sh[2] eq "6A" @};
+    
+    function extrabasis(p)
+      return (8*A!p[1]@Ax_to_axes*A!p[2]@Ax_to_axes)`elt - p[1]@Ax_to_axes - p[2]@Ax_to_axes;
+    end function;
+    
+    ans := CheckCondition(algs, rho, extrabasis);
+    Append(~out, [* "2Ab" *] cat ans);
+  end if;
+  
+  // Find all 3A algebras
+  if exists{sh : sh in shape | sh[2] in {"3A", "6A"} } then
+    algs := {@ sh[1] : sh in shape | sh[2] eq "3A" @} join
+              &join {@ {@ {@ sh[1,1], sh[1,3], sh[1,5] @}, {@ sh[1,2], sh[1,4], sh[1,6] @} @} : sh in shape | sh[2] eq "6A" @};
+    
+    function extrabasis(p)
+      return 2^5*(A!p[1]@Ax_to_axes*A!p[2]@Ax_to_axes)`elt - 2*p[1]@Ax_to_axes - 2*p[2]@Ax_to_axes - p[3]@Ax_to_axes;
+    end function;
+    
+    ans := CheckCondition(algs, rho, extrabasis);
+    Append(~out, [* "3A" *] cat ans);
+  end if;
+  
+  // Find all 4A algebras
+  if exists{sh : sh in shape | sh[2] eq "4A" } then
+    algs := {@ sh[1] : sh in shape | sh[2] eq "4A" @};
+    
+    function extrabasis(p)
+      return 2^6*(A!p[1]@Ax_to_axes*A!p[2]@Ax_to_axes)`elt - 3*p[1]@Ax_to_axes - 3*p[2]@Ax_to_axes - p[3]@Ax_to_axes - p[4]@Ax_to_axes;
+    end function;
+    
+    ans := CheckCondition(algs, rho, extrabasis);
+    Append(~out, [* "4A" *] cat ans);
+  end if;
+  
+  // Find all 5A algebras
+  if exists{sh : sh in shape | sh[2] eq "5A" } then
+    algs := {@ sh[1] : sh in shape | sh[2] eq "5A" @};
+    
+    function extrabasis(p)
+      x := 2^7*(A!p[1]@Ax_to_axes*A!p[2]@Ax_to_axes)`elt - 3*p[1]@Ax_to_axes - 3*p[2]@Ax_to_axes + p[3]@Ax_to_axes + p[4]@Ax_to_axes + p[5]@Ax_to_axes;
+      return {-x, x};
+    end function;
+    
+    ans := CheckCondition(algs, rho, extrabasis);
+    Append(~out, [* "5A" *] cat ans);
+  end if;
+
+  return out;
+end intrinsic;
