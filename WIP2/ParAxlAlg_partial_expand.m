@@ -91,6 +91,7 @@ intrinsic PartialExpandSpace(A::ParAxlAlg, U::ModTupFld) -> ParAxlAlg, Map
   Wmod := A`Wmod;
   V := A`V;
   
+  require Dimension(A`rels) eq 0: "There are still relations to be modded out by";
   require not U subset (sub<W|A`rels> + V): "There is nothing to expand by.";
   
   vprintf ParAxlAlg, 1: "Partially expanding space from %o dimensions.\n", Dimension(A);

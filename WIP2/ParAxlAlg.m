@@ -440,6 +440,21 @@ intrinsic '+'(x::ParAxlAlgElt, y::ParAxlAlgElt) -> ParAxlAlgElt
   return CreateElement(Parent(x), x`elt+y`elt);
 end intrinsic;
 
+intrinsic '-'(x::ParAxlAlgElt, y::ParAxlAlgElt) -> ParAxlAlgElt
+  {
+  Subtracts x and y.
+  }
+  require Parent(x) eq Parent(y): "x and y are not in the same partial axial algebra.";
+  return CreateElement(Parent(x), x`elt-y`elt);
+end intrinsic;
+
+intrinsic '-'(x::ParAxlAlgElt) -> ParAxlAlgElt
+  {
+  Negation of the input.
+  }
+  return CreateElement(Parent(x), -x`elt);
+end intrinsic;
+
 intrinsic '*'(al::RngElt, x::ParAxlAlgElt) -> ParAxlAlgElt
   {
   Returns the product of al and x.

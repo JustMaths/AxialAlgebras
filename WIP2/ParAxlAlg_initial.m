@@ -411,8 +411,8 @@ intrinsic PullbackEigenvaluesAndRelations(A::ParAxlAlg, ~Anew::ParAxlAlg: force_
   require Order(Ggr) le 2: "The algebra is more than Z_2-graded.";
   
   allkeys := AssociativeArray();
-  allkeys["even"] := Subsets({ e : e in evals | e@grading eq Ggr!1});
-  allkeys["odd"] := Subsets({ e : e in evals | e@grading eq Ggr.1}) diff {{}};
+  allkeys["even"] := Subsets({@ e : e in evals | e@grading eq Ggr!1@});
+  allkeys["odd"] := Subsets({@ e : e in evals | e@grading eq Ggr.1@}: empty := false);
   
   G := Group(Anew);
   Wnew := Anew`W;

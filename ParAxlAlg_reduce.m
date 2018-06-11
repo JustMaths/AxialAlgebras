@@ -299,9 +299,8 @@ intrinsic ReduceSaturated(A::ParAxlAlg, U::ModTupFld) -> ParAxlAlg, Map
   vprint ParAxlAlg, 2: "  Calculating the new multiplication table.";
   V_new_pullback := [ W | u@@ psi_rest : u in Basis(Anew`V) ];
   
-  VV := [Coordinates(V, v) : v in V_new_pullback];
-  newmult := BulkMultiply(A`mult, VV, VV);
-  prods := FastMatrix([ newmult[i,j] : j in [1..i], i in [1..#VV]], psi_mat);
+  decompV := [Coordinates(V, v) : v in V_new_pullback];
+  prods := FastMatrix(BulkMultiply(A, decompV), psi_mat);
   
   Anew`mult := [ [ Wnew | ] : i in [1..Dimension(Anew`V)]];
   for i in [1..Dimension(Anew`V)], j in [1..i] do

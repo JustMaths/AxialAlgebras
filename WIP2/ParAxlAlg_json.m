@@ -15,6 +15,8 @@ intrinsic MyGroupName(G::GrpPerm) -> MonStgElt
   }
   try
     name := eval("GroupName(G)");
+    // magma/linux/something messes up directory names with colons, so need to substitute these...
+    name := Join(Split(name, ":"), "#");
   catch e
     ord, num := Explode(IdentifyGroup(G));
     name := Sprintf("%o_%o", ord, num);
@@ -513,13 +515,15 @@ intrinsic LoadAllGroup(G::GrpPerm :field := Rationals(), library := library_loca
   {
   Returns all partial axial algebras with group G.
   }
-  return LoadAllGroup(GroupName(G): field := field, library:=library, partial:=partial);
+  return LoadAllGroup(MyGroupName(G): field := field, library:=library, partial:=partial);
 end intrinsic;
 
 intrinsic LoadAllGroup(grp_name::MonStgElt :field := Rationals(), library := library_location, partial:=false) -> SeqEnum
   {
   Returns all partial axial algebras with groupname grp_name.
   }
+  // magma/linux/something screws up directorynames with colons, so we sustitute
+  grp_name := Join(Split(grp_name, ":"), "#");
   path := Sprintf("%o/%m/%o", library, field, grp_name);
   if not ExistsPath(path) then
     return [];
