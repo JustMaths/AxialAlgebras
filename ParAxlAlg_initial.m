@@ -32,19 +32,19 @@ end function;
 We define an initial object
 
 */
-intrinsic PartialAxialAlgebra(L::List: fusion_table := MonsterFusionTable(), maximal_subgroups:=true, partial := false, field:= QQ) -> ParAxlAlg
+intrinsic PartialAxialAlgebra(L::List: fusion_table := MonsterFusionTable(), subalgebras:="maximal", partial := false, field:= QQ, subgroups := subalgebras eq "all" select Subgroups(Group(L[1])) else []) -> ParAxlAlg
   {
   Given an L = [Ax, tau, shape] containing a GSet Ax for a group G, a map tau: Ax -> involutions of G and a shape for the algebra, we define an initial object.  shape should be given as a sequence of tuples <o, type>, where the axes o[1] and o[2] generate a subalgebra of the given type with axes o.
   }
   require Type(L[1]) eq GSetIndx and Type(L[2]) eq Map and Type(L[3]) eq SeqEnum: "The list of parameters is not in the required form.";
-  return PartialAxialAlgebra(L[1],L[2],L[3]: fusion_table:=fusion_table, maximal_subgroups:=maximal_subgroups, field:=field);
+  return PartialAxialAlgebra(L[1],L[2],L[3]: fusion_table:=fusion_table, subalgebras := subalgebras, field:=field, subgroups :=subgroups);
 end intrinsic;
 /*
 
 Build an initial partial algebra
 
 */
-intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_table := MonsterFusionTable(), maximal_subgroups:=true, partial := false, field:= QQ) -> ParAxlAlg
+intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_table := MonsterFusionTable(), subalgebras:="maximal", partial := false, field:= QQ, subgroups := subalgebras eq "all" select Subgroups(Group(Ax)) else []) -> ParAxlAlg
   {
   Given a GSet Ax for a group G, a map tau: Ax -> involutions of G and a shape for the partial algebra, we define an initial object.  shape should be given as a sequence of tuples <o, type>, where the axes o[1] and o[2] generate a subalgebra of the given type with axes o.
   
@@ -84,14 +84,18 @@ intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_tab
 
   shape_flags := [ false : sh in shape ];
   
-  // We search for the maximal subgroups, check to see if we have computed these and if so glue them in.
+  // We search for the subalgebras we have computed and glue them in.
 
-  if maximal_subgroups then
+  if subalgebras in {"maximal", "all"} then
     // find which subalgebras we can glue in
-    maxsubalgs, flags := MaximalGluingSubalgebras(Ax, tau, shape: field := field, gluing:=true);
+    if subalgebras eq "maximal" then
+      gluingsubalgs, flags := MaximalGluingSubalgebras(Ax, tau, shape: field := field, gluing:=true);
+    else
+      gluingsubalgs, flags := GluingSubalgebras(Ax, tau, shape: field := field, gluing:=true, subgroups := subgroups);
+    end if;
     
-    for maxsubalg in maxsubalgs do
-      file, glue, homg := Explode(maxsubalg);
+    for tup in gluingsubalgs do
+      file, glue, homg := Explode(tup);
       alg := LoadPartialAxialAlgebra(file);
 
       // We could be trying to glue in an algebra which has collapsed
@@ -125,10 +129,10 @@ intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_tab
         pos := #subalgs`algs;
       end if;
       Append(~subalgs`maps, <map, homg, pos>);
-        
-      // Mark that we have glued in an algebra which contains a full shape
-      Or(~shape_flags, flags);
     end for;
+    
+    // Mark that we have glued in an algebra which contains a full shape
+    Or(~shape_flags, flags);
   end if;
   
   // We have now glued in all the maximal subgroups we can.
@@ -448,7 +452,7 @@ intrinsic PullbackEigenvaluesAndRelations(A::ParAxlAlg, ~Anew::ParAxlAlg: force_
     end if;
     vprint ParAxlAlg, 4: "Pulling back eigenvectors from the subalgebra.";
     
-    // NB Im_sp is a H-submodule of alg, where H = Group(alg).  If an axis id of A is conjugate to an axis of alg by g, then the double coset KgH, where K = Stab(id) are all the elements which conjugate id to an axis of alg (of a given type). There could be additional outer automorphisms of alg induced by G, but we would see these in A and they would just fuse classes of axes in alg.  So, we need only find a single g to conjugate the eigenspaces.
+    // NB Im_sp is a G'-submodule of alg, where G' = Group(alg).  If an axis id of A is conjugate to an axis of alg by g, then the double coset KgG', where K = Stab(id) are all the elements which conjugate id to an axis of alg (of a given type). There could be additional outer automorphisms of alg induced by G, but we would see these in A and they would just fuse classes of axes in alg.  So, we need only find a single g to conjugate the eigenspaces.
 
     if not assigned axes then
       axes := [ Position(all_axes, Anew`axes[j]`id`elt) : j in [1..#Anew`axes]];
@@ -493,6 +497,9 @@ intrinsic PullbackEigenvaluesAndRelations(A::ParAxlAlg, ~Anew::ParAxlAlg: force_
       
       H := (alg`axes[k]`stab@@homg)^(g^-1);
       Htrans := Transversal(Anew`axes[j]`stab, H);
+      // This is the set of right cosets representatives.
+      // E = newvects[1] is an H-submod of eigenvectors, but we should have a K-submod.
+      // EK = \cup EHg = \cup Eg.
       
       for h in Htrans diff {@ Id(G)@} do
         Append(~newvects, newvects[1]*(h@actionhom));

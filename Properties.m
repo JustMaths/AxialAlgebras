@@ -3,11 +3,104 @@
 Some functions for checking properties of partial axial algebras
 
 */
+function PrintSort(x,y)
+  if x[1] lt y[1] then
+    return -1;
+  elif x[1] gt y[1] then
+    return 1;
+  else
+    if x[2] lt y[2] then
+      return -1;
+    elif x[2] gt y[2] then
+      return 1;
+    else
+      if x[3] lt y[3] then
+        return -1;
+      elif x[3] gt y[3] then
+        return 1;
+      else
+        return 0;
+      end if;
+    end if;
+  end if;
+end function;
+
+intrinsic PrintProperties(algs::SeqEnum, filename::MonStgElt: long := false, header := true, shortshape:=true)
+  {
+  Prints in latex format to the filename the properties of the algebras in algs.  Short version is G, axes, shape, dim, m, form.  Long adds positive def/semidef, primitive, 2Ab, 3A, 4A, 5A
+  }
+  its := func< x | IntegerToString(x)>;
+  BoolToYN := func< v | v select "yes" else "no">;
+
+  str := [];  
+  for i in [1..#algs] do
+    A := algs[i];
+    
+    num_axes := &cat [ Sprintf("%o+", #o) : o in Orbits(Group(A`GSet), A`GSet)];
+    num_axes := num_axes[1..#num_axes-1];
+
+    if shortshape then
+      shapetype := &cat [ sh[2] : sh in A`shape | sh[2] notin {"6A", "5A"}];
+      if Type(shapetype) eq SeqEnum then
+        assert shapetype eq [];
+        shapetype := &cat [ sh[2] : sh in A`shape];
+      end if;
+    else
+      shapetype := &cat [ sh[2] : sh in A`shape];
+    end if;
+
+    line := [ "$" cat GroupName(Group(A):TeX:=true) cat "$", num_axes, shapetype ];
+    if Dimension(A) eq 0 then
+      line cat:= [its(Dimension(A)), "0", "-"];
+    elif Dimension(A) ne Dimension(A`V) then
+      line cat:= [ "?", "", ""];
+    else
+      prop := Properties(A);
+      line cat:= [ its(Dimension(A)), its(prop[5]), BoolToYN(prop[2])];
+    end if;
+    
+    if long then
+      if Dimension(A) eq 0 then
+        line cat:= [ "-" : j in [1..6]];
+      elif Dimension(A) ne Dimension(A`V) then
+        line cat:= [ "" : j in [1..6]];
+      else
+        line cat:= [ prop[3] select "pos" else prop[4] select "semi" else "no",
+              BoolToYN(prop[1]) ];
+        conds := prop[6];
+        for cond in ["2Ab", "3A", "4A", "5A"] do
+          so := exists(j){ j : j in [1..#conds] | conds[j,1] eq cond};
+          
+          line cat:= [ so select BoolToYN(conds[j,2]) else "-" ];
+        end for;
+      end if;
+    end if;
+    
+    Append(~str, line);
+  end for;
+  
+  Sort(~str, PrintSort);
+  
+  text := Join([ Join(line, " & ") : line in str], "\\\\\n");
+  
+  if header then
+    if not long then
+      text := "\\begin{longtable}{cccccc}\n$G$ & axes & shape & dim & $m$ & form\\\\\n\\hline\n" cat text cat "\n\\hline\n\\end{longtable}";
+    else
+      text := "\\begin{longtable}{cccccccccccc}\n$G$ & axes & shape & dim & $m$ & form & definiteness & primitive & 2Ab & 3A & 4A & 5A \\\\\n\\hline\n" 
+         cat text cat "\\\\\n\\hline\n\\end{longtable}";
+    end if;
+  end if;
+  
+  Write(filename, text);
+end intrinsic;
+
+
 intrinsic CheckAllGroup(grp_name::MonStgElt) -> List
   {
   Checks all algebras with that group.
   }
-  // magma/linux/something screws up directorynames with colons, so we sustitute
+  // magma/linux/something screws up directorynames with colons, so we substitute
   grp_name := Join(Split(grp_name, ":"), "#");
   algs := LoadAllGroup(grp_name);
   
@@ -59,6 +152,7 @@ intrinsic Properties(A::ParAxlAlg) -> List
   - if it is primitive
   - whether a form exists
   - whether it is positive definite
+  - whether it is positive semidefinite
   - mimimal m for which A is m-closed
   - whether the 2Ab, 3A, 4A, 5A conditions hold
   }
@@ -87,7 +181,7 @@ end intrinsic;
 
 intrinsic CheckSubalgebraConditions(A::ParAxlAlg) -> List
   {
-  Checks the 2Ab, 3A, 4A, 5a conditions, returns a sequence of boolean and a certificate if false.
+  Checks the 2Ab, 3A, 4A, 5A conditions, returns a sequence of boolean and a certificate if false.
   }
   if Dimension(A) eq 0 then
     return [* *];

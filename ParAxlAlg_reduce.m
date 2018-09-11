@@ -236,7 +236,25 @@ intrinsic ReduceSaturated(A::ParAxlAlg, U::ModTupFld) -> ParAxlAlg, Map
           return Anew, psi;
         else
           // There is a non-trivial quotient of the subalgebra
-          newalgs[pos] := alg_new;
+          
+          // First check to see if the old alg is not used in another map
+          if #[ t[3] : t in newmaps | t[3] eq pos] eq 1 then
+            if alg_new notin newalgs then
+              newalgs := newalgs[1..pos-1] join {@ alg_new @} join newalgs[pos+1..#newalgs];
+              // all the numberings for pos are fine
+            else
+              newalgs := newalgs[1..pos-1] join newalgs[pos+1..#newalgs];
+              // need to update all the other numberings for pos
+              for j in { j : j in [1..#newmaps] | newmaps[j,3] gt pos} do
+                newmaps[j,3] -:= 1;
+              end for;
+              pos := Position(newalgs, alg_new);
+            end if;
+          else
+            // The old alg is still used
+            Include(~newalgs, alg_new);
+            pos := Position(newalgs, alg_new);
+          end if;
           newmaps[i] := < map*quo_alg, homg, pos>;
           
           // We pull back any new relations from the subalgebra
@@ -403,7 +421,7 @@ intrinsic DecomposeVectorsWithInnerProduct(U::., L::.: ip := GetInnerProduct(Par
   }
   require Type(L) in {SeqEnum, SetIndx, List}: "The collection given is not ordered.";
   require Type(U) in {ModTupFld, ModGrp}: "The space given is not a module or a vector space.";
-  W := Parent(L[1]);
+  W := Universe(L);
   require U subset W: "U is not a submodule of W";
   if Dimension(U) eq 0 then
     return [ < W!0, v> : v in L];

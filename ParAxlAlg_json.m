@@ -44,6 +44,43 @@ end intrinsic;
 A function for choosing the filename
 
 */
+intrinsic Filename(Ax::GSet, tau::Map, shape::SeqEnum: field := Rationals()) -> BoolElt, MonStgElt
+  {
+  Find the filename of the saved algebra for Ax, tau, shape if possible.
+  }
+  shapetype := &cat [ sh[2] : sh in shape];
+  num_axes := &cat [ Sprintf("%o+", #o) : o in Orbits(Group(Ax), Ax)];
+  num_axes := num_axes[1..#num_axes-1];
+  
+  // We must check to see if the file already exists, so we know how to get the i right for different taus.  We assume that there is no other matching algebra ie that i:=1
+  i := 1;
+  
+  // first check to see if the directory exists at all
+  
+  path := Sprintf("%o/%m/%o/%o", library_location, field, MyGroupName(Group(Ax)), num_axes);
+  if ExistsPath(path) then
+    // we must now see if there is already an algebra with the same path with a different tau.
+    algs := ls(path);
+    shapes := [ ParseShape(sh) : sh in algs];
+    possibles := {@ i : i in [1..#shapes] | shapes[i] eq ParseShape(shapetype) @};
+    
+    if #possibles ne 0 then
+      so := false;
+      for j in possibles do
+        alg_type := GetTypePartialAxialAlgebra(Sprintf("%o/%o", path, algs[j]));
+        _, alg_ax, alg_tau, alg_shape, _ := Explode(alg_type);
+        
+        so := IsIsomorphic(alg_ax, alg_tau, alg_shape, Ax, tau, shape);
+        if so then
+          return true, Sprintf("%o/%o", path, algs[j]);
+        end if;
+      end for;
+    end if;
+  end if;
+  
+  return false, _; 
+end intrinsic;
+
 intrinsic Filename(A::ParAxlAlg) -> MonStgElt
   {
   Returns a filename of the form
@@ -76,7 +113,7 @@ intrinsic Filename(A::ParAxlAlg) -> MonStgElt
       so := false;
       for j in possibles do
         alg_type := GetTypePartialAxialAlgebra(Sprintf("%o/%o", path, algs[j]));
-        _, alg_ax, alg_tau, alg_shape := Explode(alg_type);
+        _, alg_ax, alg_tau, alg_shape, _ := Explode(alg_type);
         
         so := IsIsomorphic(alg_ax, alg_tau, alg_shape, A`GSet, A`tau, A`shape);
         if so then
@@ -120,6 +157,23 @@ intrinsic ls(dirname::MonStgElt) -> SeqEnum
   }
   string := Pipe(Sprintf("python -c '%o' '%o'", ls_script, dirname), "");
   return Split(string, "\n/");
+end intrinsic;
+
+size_script := "
+import os
+import sys
+
+filename = sys.argv[1]
+
+print os.stat(filename).st_size
+";
+
+intrinsic Size(filename::MonStgElt) -> RngIntElt
+  {
+  Gets the file size.
+  }
+  string := Pipe(Sprintf("python -c '%o' '%o'", size_script, filename), "");
+  return eval(string);
 end intrinsic;
 
 exists_script := "
@@ -320,7 +374,7 @@ Loads just enough of the file to get the shape info
 */
 intrinsic GetTypePartialAxialAlgebra(filename::MonStgElt) -> Tup
   {
-  Partially load the axial algebra given by filename and return a tuple of the field, GSet, tau-map and shape.
+  Partially load the axial algebra given by filename and return a tuple of the field, GSet, tau-map and shape and dim (or -1 if no dimension is found).
   }
   vprint ParAxlAlg, 2: "Partially Loading partial axial algebra...";
   paths := Split(filename, "/");
@@ -328,6 +382,12 @@ intrinsic GetTypePartialAxialAlgebra(filename::MonStgElt) -> Tup
     realfilename := filename cat ".json";
   else
     realfilename := filename;
+  end if;
+
+  // If the file is small, then we assume it is for an algebra of dimension 0 and open it all.  Otherwise, we just open a the first few lines
+  if Size(filename) le 3000 then
+    A := LoadPartialAxialAlgebra(filename);
+    return <BaseField(A), A`GSet, A`tau, A`shape, Dimension(A)>;
   end if;
 
   file := Open(filename, "r");
@@ -373,7 +433,7 @@ intrinsic GetTypePartialAxialAlgebra(filename::MonStgElt) -> Tup
   
   shape := [ < {@ i : i in Numbers(sh[1])@}, sh[2]> : sh in alg["shape"] ];
   
-  return <F, Ax, tau, shape>;  
+  return <F, Ax, tau, shape, -1>;  
 end intrinsic;
 /*
 
@@ -393,6 +453,8 @@ intrinsic LoadPartialAxialAlgebra(filename::MonStgElt) -> ParAxlAlg
   end if;
   
   string := Read(realfilename);
+  // remove any end of line characters that magma tends to add
+  string := &cat Split(string, "\\\n");
   alg := ParseJSON(string);
   vprintf ParAxlAlg, 2: " complete!\n";
   return PartialAxialAlgebra(alg);
@@ -432,7 +494,7 @@ intrinsic PartialAxialAlgebra(alg::Assoc) -> ParAxlAlg
   
   A`shape := [ < {@ i : i in Numbers(sh[1])@}, sh[2]> : sh in alg["shape"] ];
 
-  A`number_of_axes := n;
+  A`number_of_axes := #Ax;
 
   dim := #alg["Wmod"][1,2];
   A`Wmod := GModule(G, MatrixAlgebra<F, dim | [ Matrix(F,alg["Wmod"][i,2]) : i in [1..#gens]]>);

@@ -509,7 +509,7 @@ end intrinsic;
 Find all the helpful subalgebras we could glue in by checking maximal subgroups.  Has a switch so to check if we have computed them and if so returns the gluing information.
 
 */
-intrinsic MaximalGluingSubalgebras(L::List: field := Rationals(), gluing:= false, partial:=false) -> List, SeqEnum
+intrinsic MaximalGluingSubalgebras(L::List: field := Rationals(), gluing := false, partial := false) -> List, SeqEnum
   {
   This routine expects a List [* Ax, tau, shape *] and has two functions:
 
@@ -521,10 +521,10 @@ intrinsic MaximalGluingSubalgebras(L::List: field := Rationals(), gluing:= false
   }
   require #L eq 3 and Type(L[2]) eq Map and Type(L[3]) eq SeqEnum: "The input is not of the required form";
 
-  return MaximalGluingSubalgebras(L[1], L[2], L[3]);
+  return MaximalGluingSubalgebras(L[1], L[2], L[3]:field := field, gluing := gluing, partial := partial);
 end intrinsic;
 
-intrinsic MaximalGluingSubalgebras(Ax::GSet, tau::Map, shape::SeqEnum: field := Rationals(), gluing:= false, partial:=false) -> List, SeqEnum
+intrinsic MaximalGluingSubalgebras(Ax::GSet, tau::Map, shape::SeqEnum: field := Rationals(), gluing := false, partial := false) -> List, SeqEnum
   {
   This routine has two functions:
 
