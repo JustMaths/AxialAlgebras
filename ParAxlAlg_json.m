@@ -135,7 +135,7 @@ intrinsic Filename(A::ParAxlAlg) -> MonStgElt
     return path cat Sprintf("/%o_%o.json", shapetype, i);
   else
     return path cat Sprintf("/%o_%o_partial.json", shapetype, i);
-  end if;  
+  end if;
 end intrinsic;
 /*
 

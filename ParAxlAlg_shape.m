@@ -9,6 +9,24 @@ A function for sorting the shapes
 
 */
 ShapeSort := func<x,y | x[1] gt y[1] select -1 else x[1] lt y[1] select 1 else x[2] gt y[2] select 1 else x[2] lt y[2] select -1 else 0>;
+/*
+
+A function for sorting the tau maps, so we get a deterministic tau map
+
+*/
+function TauSort(f, g)
+  X := Domain(f);
+  for i in [1..#X] do
+    imf := Eltseq(i@f);
+    img := Eltseq(i@g);
+    if imf lt img then
+      return -1;
+    elif imf gt img then
+      return 1;
+    end if;
+  end for;
+  return 0;
+end function;
 //
 // ================= FINDING THE SHAPE ===================
 //
@@ -217,8 +235,14 @@ intrinsic AdmissibleTauMaps(Ax::GSet) -> SeqEnum
   tausxN := CartesianProduct(tau_maps, N);
   f := map< tausxN -> tau_maps | y :-> tau_return(map<Ax-> G | i:-> ((((i^(y[2]^-1))@y[1])@phi)^y[2])@@phi >) >;
   Taus := GSet(N, tau_maps, f);
+
+  // We wish to get a deterministic algorithm, so we sort the tau-maps
+
+  Taus_orbs := [ Sort(o, TauSort) : o in Orbits(N, Taus)];
+  Taus_orb_reps := Sort([o[1] : o in Taus_orbs], TauSort);
   
-  return [ <tau, Stabiliser(N, Taus, tau)> : tau in [ o[1] : o in Orbits(N, Taus)]];
+  return [ <tau, Stabiliser(N, Taus, tau)> where tau := Taus_orb_reps[i]
+              : i in [1..#Taus_orb_reps]];
 end intrinsic;
 /*
 
@@ -733,8 +757,7 @@ intrinsic GluingSubalgebras(Ax::GSet, tau::Map, shape::SeqEnum: field := Rationa
         continue;
       else
         // We wish to search for any subalgebras and check whether we have completed them
-        num_axes := &cat [ Sprintf("%o+", #o) : o in orbs[Setseq(set)]];
-        num_axes := num_axes[1..#num_axes-1];
+        num_axes := Join([ IntegerToString(#o) : o in orbs[Setseq(set)]], "+");
         
         path := Sprintf("library/%m/%o/%o", field, MyGroupName(K_faithful), num_axes);
         if not ExistsPath(path) then
@@ -785,6 +808,7 @@ intrinsic GluingSubalgebras(Ax::GSet, tau::Map, shape::SeqEnum: field := Rationa
         
         // If the dimension is zero, it collapses the algebra and we return just this
         if dim eq 0 then
+          vprintf ParAxlAlg, 4: "Found a 0-dim algebra to glue in on the axes %o with group %o.\n", axes, GroupName(K_faithful);
           return [*<Sprintf("%o/%o", path, algs[j]), map, phi*homg>*], shape_flags;
         end if;
         

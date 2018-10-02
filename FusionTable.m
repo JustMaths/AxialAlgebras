@@ -175,6 +175,22 @@ intrinsic UsefulFusionRules(T::FusTab) -> SetIndx
 end intrinsic;
 /*
 
+Returns the Jordan type fusion table.
+
+*/
+intrinsic JordanFusionTable(eta) -> FusTab
+  {
+  Returns the fusion table for the Monster.
+  }
+  T := New(FusTab);
+  T`eigenvalues := {@ 1, 0, eta @};
+  T`table := [[ {@1@}, {@ @}, {@eta@}], [ {@@}, {@ 0 @}, {@eta@}], [ {@eta@}, {@eta @}, {@1,0@}]];
+  _ := UsefulFusionRules(T);
+  
+  return T;
+end intrinsic;
+/*
+
 Returns the Monster fusion table.
 
 */

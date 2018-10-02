@@ -104,7 +104,7 @@ intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_tab
         A`Wmod := GModule(G, MatrixAlgebra<field,0|[ZeroMatrix(field,0,0) : g in Generators(G)]>);
         A`W := RSpace(field, Dimension(A`Wmod));
         A`V := A`W;
-        A`GSet_to_axes := map<Ax -> A`W | i :-> W!0>;
+        A`GSet_to_axes := map<Ax -> A`W | i :-> A`W!0>;
         return A;
       end if;
         
@@ -239,7 +239,7 @@ intrinsic AssignAxis(A::ParAxlAlg, Ax::GSet, tau::Map, a::RngIntElt) -> Axis
   assert a@tau in Centre(H);
   idem`inv := a@tau;
 
-  Ggr, gr := Grading(A`fusion_table); 
+  Ggr, gr := Grading(A`fusion_table);
   require Order(Ggr) in {1,2}: "The fusion table is not Z_2-graded.";
 
   idem`odd := AssociativeArray();

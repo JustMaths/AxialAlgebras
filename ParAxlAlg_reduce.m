@@ -529,9 +529,6 @@ intrinsic ExpandSpace(A::ParAxlAlg: implement := true) -> ParAxlAlg, Map
 
   vprint ParAxlAlg, 2: "  Building the multiplication.";
   tt := Cputime();
-
-  // We begin by defining two function which we will use to multiply quickly. We use these both in defining the multiplication of Anew and also when building the odd and even parts.
-  // precompute mult matrices for VC and C2
   
   // We precompute the decompositions
   decomp := DecomposeVectorsWithInnerProduct(V, Basis(W): ip:=ip);
