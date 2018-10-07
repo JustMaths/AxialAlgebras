@@ -152,6 +152,7 @@ intrinsic PartialExpandSpace(A::ParAxlAlg, U::ModTupFld) -> ParAxlAlg, Map
   Anew`W := Wnew;
   Anew`V := (VX)@WtoWnew;
   vprintf ParAxlAlg, 4: "Time taken to build modules and vector spaces %o.\n", Cputime(tt);
+  vprintf ParAxlAlg, 4: "Module dimension is %o.\n", Dimension(Anew`W);
   
   vprint ParAxlAlg, 2: "  Building the multiplication.";
   tt := Cputime();

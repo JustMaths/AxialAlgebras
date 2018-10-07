@@ -161,6 +161,7 @@ intrinsic TauAction(Ax::GSet, tau_maps::SetIndx) -> GSet
   Given a GSet Ax and a set of tau-maps on Ax, find the induced action on the tau maps.
   }
   G := Group(Ax);
+  orbs := Orbits(G, Ax);
   phi, GG := Action(G, Ax);
   GAx := Stabiliser(Sym(#Ax), Set(orbs));
   N := Normaliser(GAx, GG);
@@ -168,7 +169,7 @@ intrinsic TauAction(Ax::GSet, tau_maps::SetIndx) -> GSet
   
   // We must define equality of maps
   
-  orb_reps := [Representative(o) : o in Orbits(G, Ax)];
+  orb_reps := [Representative(o) : o in orbs];
   MapEq := function(f,g)
     return forall{i: i in orb_reps | i@f eq i@g};
   end function;

@@ -101,7 +101,7 @@ intrinsic Filename(A::ParAxlAlg) -> MonStgElt
   
   // The old type didn't have a directory name for the fusion table, so we check and reassign
   if not assigned A`fusion_table`directory then
-    require A`fusion_table eq MonsterFusionTable(): "You are using a non-Monster fusion table.  Please manually update it to the latest version of fusion tbale with name and directory and try again.";
+    require A`fusion_table eq MonsterFusionTable(): "You are using a non-Monster fusion table.  Please manually update it to the latest version of fusion table with name and directory and try again.";
     A`fusion_table := MonsterFusionTable();
   end if;
   
@@ -221,7 +221,25 @@ intrinsic SavePartialAxialAlgebra(A::ParAxlAlg: filename:=Filename(A))
   path := &cat[ p cat "/" : p in paths[1..#paths-1]];
   System(Sprintf("mkdir -p '%o'", path));
   
-  PrintFile(filename, JSON(A): Overwrite:=true);
+  // To save larger algebras without hitting magma's limit on strings of 2^31bits we do each element in the list seperately
+  L := [ J[2..#J-2] where J := JSON([*l*]) : l in ParAxlAlgToList(A) ];
+  
+  System(Sprintf("rm -r %o", filename));
+  maxlength := 8000;
+  str := "{\n" cat L[1];
+  for l in L[2..#L] do
+    // we remove some stray "\n"
+    ll := l[1] eq "\n" select (l[#l] eq "\n" select l[2..#l-1] else l[2..#l])
+             else l[#l] eq "\n" select l[1..#l-1] else l;
+    if #str + #ll lt maxlength then
+      str cat:= ",\n" cat ll;
+    else
+      PrintFile(filename, str cat ",");
+      str := ll;
+    end if;
+  end for;
+  PrintFile(filename, str cat "\n}");
+  
   vprintf ParAxlAlg, 2: " complete!\n";
 end intrinsic;
 /*

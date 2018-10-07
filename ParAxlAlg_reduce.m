@@ -299,6 +299,7 @@ intrinsic ReduceSaturated(A::ParAxlAlg, U::ModTupFld) -> ParAxlAlg, Map
   Anew`Miyamoto_group := A`Miyamoto_group;
   
   vprintf ParAxlAlg, 4: "Time taken to build modules and vector spaces %o.\n", Cputime(tt);
+  vprintf ParAxlAlg, 4: "Module dimension is %o.\n", Dimension(Anew`W);
   
   tt := Cputime();  
   UpdateAxes(A, ~Anew, psi: matrix := psi_mat);

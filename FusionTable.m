@@ -58,21 +58,32 @@ intrinsic ChangeField(T::FusTab, F::Fld) -> FusTab
   
   Note that we need to be able to coerce any scalars into the new field.  For example, the rationals to a finite field is ok, but not the other way.
  }
+  return ChangeRing(T, F);
+end intrinsic;
+
+intrinsic ChangeField(T::FusTab, F::Fld, f::Map) -> FusTab
+  {
+  Changes the field of definition of the fusion table.  Checks that the eigenvalues do not collapse.
+  
+  Note that we need to be able to coerce any scalars into the new field.  For example, the rationals to a finite field is ok, but not the other way.
+ }
   Tnew := New(FusTab);
-  Tnew`name := T`name;
-  Tnew`directory := T`directory;
-  Tnew`eigenvalues := ChangeUniverse(T`eigenvalues, F);
+  Tnew`eigenvalues := T`eigenvalues@f;
   require #Tnew`eigenvalues eq #T`eigenvalues: "Changing field collapses some eigenvalues.";
   
-  Tnew`table := [ [ ChangeUniverse(S, F) : S in row] : row in T`table];
+  Tnew`table := [ [ S@f : S in row] : row in T`table];
   
   if assigned T`group then
     Tnew`group := T`group;
-    Tnew`grading := map< Tnew`eigenvalues -> Tnew`group | i:-> T`eigenvalues[Position(Tnew`eigenvalues, i)] @T`grading>;
+    Tnew`grading := 
+      map< Tnew`eigenvalues -> Tnew`group | 
+        i:-> T`eigenvalues[Position(Tnew`eigenvalues, i)] 
+               @T`grading>;
   end if;
   
   if assigned T`useful then
-    Tnew`useful := {@ < ChangeUniverse(tup[i], F) : i in [1..3]> : tup in T`useful @};
+    Tnew`useful := {@ < tup[i]@f : i in [1..3]> : 
+          tup in T`useful @};
   end if;
   
   return Tnew;
@@ -88,7 +99,7 @@ intrinsic ChangeRing(T::FusTab, F::Rng) -> FusTab
   Tnew`name := T`name;
   Tnew`directory := T`directory;
   Tnew`eigenvalues := ChangeUniverse(T`eigenvalues, F);
-  require #Tnew`eigenvalues eq #T`eigenvalues: "Changing field collapses some eigenvalues.";
+  require #Tnew`eigenvalues eq #T`eigenvalues: "Changing ring collapses some eigenvalues.";
   
   Tnew`table := [ [ ChangeUniverse(S, F) : S in row] : row in T`table];
   

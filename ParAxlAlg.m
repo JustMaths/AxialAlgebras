@@ -160,16 +160,29 @@ intrinsic ChangeField(A::ParAxlAlg, F::Fld) -> ParAxlAlg
   
   Note that we need to be able to coerce any scalars into the new field.  For example, the rationals to a finite field is ok, but not the other way.
   }
-  new_fusion_table := ChangeField(A`fusion_table, F);
+  return ChangeRing(A, F);
+end intrinsic;
+
+function ChangeRingSeq(s, F, f);
+  return [ ChangeRing(x, F, f) : x in s ];
+end function;
+
+intrinsic ChangeField(A::ParAxlAlg, F::Fld, f::Map) -> ParAxlAlg
+  {
+  Changes the field of definition of the partial axial algebra using the map f whose codomian is F.  Checks that the eigenvalues do not collapse.
+  }
+  require Codomain(f) eq F: 
+    "The Codomain of the map given is not the chosen field";
+  new_fusion_table := ChangeField(A`fusion_table, F, f);
   
   Anew := New(ParAxlAlg);
-  Anew`Wmod := ChangeRing(A`Wmod, F);
-  Wnew := ChangeRing(A`W, F);
+  Anew`Wmod := ChangeRing(A`Wmod, F, f);
+  Wnew := ChangeRing(A`W, F, f);
   Anew`W := Wnew;
   // Doing ChangeRing sometimes changes the order of the basis elements.
-  Anew`V := sub<Wnew | ChangeUniverse(Basis(A`V), Wnew)>;
+  Anew`V := sub<Wnew | ChangeRingSeq(Basis(A`V), F, f) >;
   if assigned A`mult then
-    Anew`mult := [ ChangeUniverse(row, Anew`W) : row in A`mult];
+    Anew`mult := [ ChangeRingSeq(row, F, f) : row in A`mult ];
   end if;
   Anew`GSet := A`GSet;
   Anew`tau := A`tau;
@@ -177,16 +190,16 @@ intrinsic ChangeField(A::ParAxlAlg, F::Fld) -> ParAxlAlg
   Anew`GSet_to_axes := map<Anew`GSet -> Anew`W | i:-> i@A`GSet_to_axes>;
   Anew`number_of_axes := A`number_of_axes;
   Anew`fusion_table := new_fusion_table;
-  Anew`group := A`group;
-  Anew`Miyamoto_group := A`Miyamoto_group;
   
   if assigned A`subalgs then
     subalgs := New(SubAlg);
-    subalgs`subsps := [* sub<Wnew | ChangeUniverse(Basis(U), Wnew)> : U in A`subalgs`subsps *];
-    subalgs`algs := {@ ChangeField(alg, F) : alg in A`subalgs`algs @};
+    subalgs`subsps := [* sub<Wnew | ChangeRingSeq(Basis(U), F, f)> 
+                    : U in A`subalgs`subsps *];
+    subalgs`algs := {@ ChangeField(alg, F, f) : alg in A`subalgs`algs @};
     subalgs`maps := [* < 
        hom< subalgs`subsps[i] -> subalgs`algs[tup[3]]`W | 
-           [ < subalgs`subsps[i].j, ChangeRing(A`subalgs`subsps[i].j@tup[1], F)> : j in [1..Dimension(A`subalgs`subsps[i])]]>, 
+           [ < subalgs`subsps[i].j, ChangeRing(A`subalgs`subsps[i].j@tup[1], F, f)> 
+              : j in [1..Dimension(A`subalgs`subsps[i])]]>, 
          tup[2], tup[3] >
      where tup := A`subalgs`maps[i] : i in [1..#A`subalgs`maps] *];
    Anew`subalgs := subalgs;
@@ -196,7 +209,7 @@ intrinsic ChangeField(A::ParAxlAlg, F::Fld) -> ParAxlAlg
     axes := [];
     for i in [1..#A`axes] do
       axis := New(AxlAxis);
-      axis`id := Anew!ChangeRing(A`axes[i]`id`elt, F);
+      axis`id := Anew!ChangeRing(A`axes[i]`id`elt, F, f);
       axis`stab := A`axes[i]`stab;
       axis`inv := A`axes[i]`inv;
       axis`even := AssociativeArray();
@@ -204,7 +217,7 @@ intrinsic ChangeField(A::ParAxlAlg, F::Fld) -> ParAxlAlg
       
       for attr in ["odd", "even"] do
         for key in Keys(A`axes[i]``attr) do
-          axis``attr[ChangeUniverse(key, F)] := ChangeRing(A`axes[i]``attr[key], F);
+          axis``attr[key@f] := ChangeRing(A`axes[i]``attr[key], F, f);
         end for;
       end for;
       Append(~axes, axis);
@@ -213,7 +226,7 @@ intrinsic ChangeField(A::ParAxlAlg, F::Fld) -> ParAxlAlg
   end if;
   
   if assigned A`rels then
-    Anew`rels := ChangeUniverse(A`rels, Wnew);
+    Anew`rels := A`rels@f;
   end if;
 
   return Anew;
