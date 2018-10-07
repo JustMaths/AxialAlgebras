@@ -6,11 +6,13 @@ Defines a fusion table and the necessary function to use it.
 declare type FusTab;
 
 declare attributes FusTab:
-  eigenvalues,  // a SetIndx of eigenvalues
-  table,        // table of values for the fusion table
-  useful,       // a SetIndx of tuples of the useful fusion rules
-  group,        // a GrpPerm which is the grading on the table
-  grading;      // a map from the values to the group giving the grading
+  name,          // the name of the fusion table
+  directory,     // a name to use as a directory to save under
+  eigenvalues,   // a SetIndx of eigenvalues
+  table,         // table of values for the fusion table
+  useful,        // a SetIndx of tuples of the useful fusion rules
+  group,         // a GrpPerm which is the grading on the table
+  grading;       // a map from the values to the group giving the grading
 
 intrinsic 'eq'(A::FusTab, B::FusTab) -> BoolElt
   {
@@ -27,6 +29,9 @@ intrinsic Print(T::FusTab)
   {
   Prints a fusion table.
   }
+  if assigned T`name then
+    printf "%o fusion table.\n", T`name;
+  end if;
   L := T`table;
   obj := T`eigenvalues;
   
@@ -54,6 +59,34 @@ intrinsic ChangeField(T::FusTab, F::Fld) -> FusTab
   Note that we need to be able to coerce any scalars into the new field.  For example, the rationals to a finite field is ok, but not the other way.
  }
   Tnew := New(FusTab);
+  Tnew`name := T`name;
+  Tnew`directory := T`directory;
+  Tnew`eigenvalues := ChangeUniverse(T`eigenvalues, F);
+  require #Tnew`eigenvalues eq #T`eigenvalues: "Changing field collapses some eigenvalues.";
+  
+  Tnew`table := [ [ ChangeUniverse(S, F) : S in row] : row in T`table];
+  
+  if assigned T`group then
+    Tnew`group := T`group;
+    Tnew`grading := map< Tnew`eigenvalues -> Tnew`group | i:-> T`eigenvalues[Position(Tnew`eigenvalues, i)] @T`grading>;
+  end if;
+  
+  if assigned T`useful then
+    Tnew`useful := {@ < ChangeUniverse(tup[i], F) : i in [1..3]> : tup in T`useful @};
+  end if;
+  
+  return Tnew;
+end intrinsic;
+
+intrinsic ChangeRing(T::FusTab, F::Rng) -> FusTab
+  {
+  Changes the field of definition of the fusion table.  Checks that the eigenvalues do not collapse.
+  
+  Note that we need to be able to coerce any scalars into the new field.  For example, the rationals to a finite field is ok, but not the other way.
+ }
+  Tnew := New(FusTab);
+  Tnew`name := T`name;
+  Tnew`directory := T`directory;
   Tnew`eigenvalues := ChangeUniverse(T`eigenvalues, F);
   require #Tnew`eigenvalues eq #T`eigenvalues: "Changing field collapses some eigenvalues.";
   
@@ -182,7 +215,10 @@ intrinsic JordanFusionTable(eta) -> FusTab
   {
   Returns the fusion table for the Monster.
   }
+  require eta notin {1,0}: "The parameter may not be 0, or 1.";
   T := New(FusTab);
+  T`name := "Jordan";
+  T`directory := Join(Split(Sprintf("Jordan_%o", eta), "/"), ",");
   T`eigenvalues := {@ 1, 0, eta @};
   T`table := [[ {@1@}, {@ @}, {@eta@}], [ {@@}, {@ 0 @}, {@eta@}], [ {@eta@}, {@eta @}, {@1,0@}]];
   _ := UsefulFusionRules(T);
@@ -199,6 +235,8 @@ intrinsic MonsterFusionTable() -> FusTab
   Returns the fusion table for the Monster.
   }
   T := New(FusTab);
+  T`name := "Monster";
+  T`directory := "Monster_1,4_1,32";
   T`eigenvalues := {@ 1, 0, 1/4, 1/32 @};
   T`table := [[ {@1@}, {@ @}, {@1/4@}, {@1/32@}], [ {@@}, {@ 0 @}, {@1/4@}, {@1/32@}], [ {@1/4@}, {@1/4 @}, {@1,0@}, {@1/32@}], [ {@1/32@}, {@1/32@}, {@1/32@}, {@1,0,1/4@}]];
   _ := UsefulFusionRules(T);
@@ -214,7 +252,10 @@ intrinsic IsingTypeFusionTable(alpha::FldRatElt, beta::FldRatElt) -> FusTab
   {
   Returns the fusion table of Ising type alpha, beta.
   }
+  require #({alpha, beta} meet {1,0}) eq 0 : "The parameters may not be 0, or 1.";
   T := New(FusTab);
+  T`name := "Ising";
+  T`directory := Join(Split(Sprintf("Ising_%o_%o", alpha, beta), "/"), ",");
   T`eigenvalues := {@ 1, 0, alpha, beta @};
   T`table := [[ {@1@}, {@ @}, {@alpha@}, {@beta@}], [ {@@}, {@ 0 @}, {@alpha@}, {@beta@}], [ {@alpha@}, {@alpha @}, {@1,0@}, {@beta@}], [ {@beta@}, {@beta@}, {@beta@}, {@1,0,alpha@}]];
   _ := UsefulFusionRules(T);
@@ -230,9 +271,59 @@ intrinsic HyperJordanTypeFusionTable(eta::FldRatElt) -> FusTab
   {
   Returns the fusion table of extended Jordan-type eta.
   }
+  return IsingTypeFusionTable(2*eta, eta);
+end intrinsic;
+//-----------------------------------------------------------
+//
+// Code to load and save a fusion table in the json format
+//
+//-----------------------------------------------------------
+/*
+
+Code to serialise a fusion table
+
+*/
+intrinsic FusTabToList(T::FusTab) -> List
+  {
+  Transform a fusion table to a List prior to serialising as a JSON.
+  }
+  L := [* *];
+  Append(~L, <"class", "Fusion table">);
+
+  if assigned T`name then
+    Append(~L, <"name", T`name>);
+    Append(~L, <"directory", T`directory>);
+  end if;
+  
+  Append(~L, <"eigenvalues", Setseq(T`eigenvalues)>);
+  Append(~L, <"table", T`table>);
+  
+  return L;
+end intrinsic;
+/*
+
+Code to load a fusion table.
+
+*/
+intrinsic FusionTable(A::Assoc) -> FusTab
+  {
+  Create a fusion table T from an associative array.  We assume that the associative array represents T stored in json format.
+  }
+  keys := Keys(A);
+  require "class" in keys and A["class"] eq "Fusion table": "The file given does not have a valid fusion table.";
   T := New(FusTab);
-  T`eigenvalues := {@ 1, 0, 2*eta, eta @};
-  T`table := [[ {@1@}, {@ @}, {@2*eta@}, {@eta@}], [ {@@}, {@ 0 @}, {@2*eta@}, {@eta@}], [ {@2*eta@}, {@2*eta @}, {@1,0@}, {@eta@}], [ {@eta@}, {@eta@}, {@eta@}, {@1,0,2*eta@}]];
+  T`eigenvalues := IndexedSet(Numbers(A["eigenvalues"]));
+  T`table := [ [ IndexedSet(Numbers(S)) : S in row ] : row in A["table"]];
+  
+  if "name" in keys then
+    T`name := A["name"];
+    T`directory := A["directory"];
+  elif T eq MonsterFusionTable() then
+    // We want to load in such a way that we get the new format.
+    // The other fusion tables have probably not been used.
+    return MonsterFusionTable();
+  end if;
+  
   _ := UsefulFusionRules(T);
   
   return T;

@@ -10,6 +10,8 @@ library_location := "library";
 declare type ParAxlAlg[ParAxlAlgElt];
 
 declare attributes ParAxlAlg:
+  group,          // The automorphism group on the axes
+  Miyamoto_group, // The Miyamoto group
   W,              // A vectorspace on which partial multiplication can be defined
   Wmod,           // A G-module representing the same vector space
   V,              // A vectorspace on which we know how to multiply
@@ -80,10 +82,17 @@ intrinsic Print(A::ParAxlAlg)
   {
   Prints a partial axial algebra.
   }
-  if assigned A`W and assigned A`V and assigned A`axes then
-    printf "Partial axial algebra of shape %o, dimension %o, with known multiplication of dimension %o and %o axes in %o class%o", &cat [sh[2] : sh in A`shape], Dimension(A`W), Dimension(A`V), A`number_of_axes, #A`axes, #A`axes eq 1 select "" else "es";
-  elif assigned A`W and assigned A`V then
-    printf "Partial axial algebra of shape %o, dimension %o, with known multiplication of dimension %o and %o axes", &cat [sh[2] : sh in A`shape], Dimension(A`W), Dimension(A`V), A`number_of_axes;
+  num_axes := Join([ IntegerToString(#o) : o in Orbits(A`Miyamoto_group, A`GSet)], "+");
+  if assigned A`axes then
+    // The algebra should not be 0-dim
+    if Dimension(A`W) eq Dimension(A`V) then
+      printf "A complete axial algebra for the group %o, of shape %o, dimension %o and %o axes in %o class%o.", GroupName(A`group), &cat [sh[2] : sh in A`shape], Dimension(A`W), num_axes, #A`axes, #A`axes eq 1 select "" else "es";
+    else
+      printf "Partial axial algebra for the group %o, of shape %o, dimension %o, with known multiplication of dimension %o and %o axes in %o class%o.", GroupName(A`group), &cat [sh[2] : sh in A`shape], Dimension(A`W), Dimension(A`V), num_axes, #A`axes, #A`axes eq 1 select "" else "es";
+    end if;
+  else
+    assert Dimension(A`W) eq 0;
+    printf "A 0-dimensional complete axial algebra for the group %o, of shape %o and %o axes.", GroupName(A`group), &cat [sh[2] : sh in A`shape], Dimension(A`W), Dimension(A`V), num_axes;
   end if;
 end intrinsic;
 
@@ -105,14 +114,28 @@ intrinsic BaseField(A::ParAxlAlg) -> Rng
   {
   Base field of the partial algebra.
   }
-  return BaseField(A`W);
+  return BaseRing(A`W);
+end intrinsic;
+
+intrinsic BaseRing(A::ParAxlAlg) -> Rng
+  {
+  Base field of the partial algebra.
+  }
+  return BaseRing(A`W);
 end intrinsic;
 
 intrinsic Group(A::ParAxlAlg) -> GrpPerm
   {
   Group of the partial algebra.
   }
-  return Group(A`Wmod);
+  return A`group;
+end intrinsic;
+
+intrinsic MiyamotoGroup(A::ParAxlAlg) -> GrpPerm
+  {
+  Miyamoto group of the partial algebra.
+  }
+  return A`Miyamoto_group;
 end intrinsic;
 /*
 intrinsic Hash(A::ParAxlAlg) -> RngIntElt
@@ -154,6 +177,8 @@ intrinsic ChangeField(A::ParAxlAlg, F::Fld) -> ParAxlAlg
   Anew`GSet_to_axes := map<Anew`GSet -> Anew`W | i:-> i@A`GSet_to_axes>;
   Anew`number_of_axes := A`number_of_axes;
   Anew`fusion_table := new_fusion_table;
+  Anew`group := A`group;
+  Anew`Miyamoto_group := A`Miyamoto_group;
   
   if assigned A`subalgs then
     subalgs := New(SubAlg);
@@ -180,6 +205,71 @@ intrinsic ChangeField(A::ParAxlAlg, F::Fld) -> ParAxlAlg
       for attr in ["odd", "even"] do
         for key in Keys(A`axes[i]``attr) do
           axis``attr[ChangeUniverse(key, F)] := ChangeRing(A`axes[i]``attr[key], F);
+        end for;
+      end for;
+      Append(~axes, axis);
+    end for;
+    Anew`axes := axes;
+  end if;
+  
+  if assigned A`rels then
+    Anew`rels := ChangeUniverse(A`rels, Wnew);
+  end if;
+
+  return Anew;
+end intrinsic;
+
+intrinsic ChangeRing(A::ParAxlAlg, F::Rng) -> ParAxlAlg
+  {
+  Changes the field of definition of the partial axial algebra.  Checks that the eigenvalues do not collapse.
+  
+  Note that we need to be able to coerce any scalars into the new field.  For example, the rationals to a finite field is ok, but not the other way.
+  }
+  new_fusion_table := ChangeRing(A`fusion_table, F);
+  
+  Anew := New(ParAxlAlg);
+  Anew`Wmod := ChangeRing(A`Wmod, F);
+  Wnew := RSpace(F, Degree(A`W));
+  Anew`W := Wnew;
+  // Doing ChangeRing sometimes changes the order of the basis elements.
+  Anew`V := sub<Wnew | ChangeUniverse(Basis(A`V), Wnew)>;
+  if assigned A`mult then
+    Anew`mult := [ ChangeUniverse(row, Anew`W) : row in A`mult];
+  end if;
+  Anew`GSet := A`GSet;
+  Anew`tau := A`tau;
+  Anew`shape := A`shape;
+  Anew`GSet_to_axes := map<Anew`GSet -> Anew`W | i:-> i@A`GSet_to_axes>;
+  Anew`number_of_axes := A`number_of_axes;
+  Anew`fusion_table := new_fusion_table;
+  Anew`group := A`group;
+  Anew`Miyamoto_group := A`Miyamoto_group;
+  
+  if assigned A`subalgs then
+    subalgs := New(SubAlg);
+    subalgs`subsps := [* sub<Wnew | ChangeUniverse(Basis(U), Wnew)> : U in A`subalgs`subsps *];
+    subalgs`algs := {@ ChangeRing(alg, F) : alg in A`subalgs`algs @};
+    subalgs`maps := [* < 
+       hom< subalgs`subsps[i] -> subalgs`algs[tup[3]]`W | 
+           [ < subalgs`subsps[i].j, ChangeRing(A`subalgs`subsps[i].j@tup[1], F)> : j in [1..Dimension(A`subalgs`subsps[i])]]>, 
+         tup[2], tup[3] >
+     where tup := A`subalgs`maps[i] : i in [1..#A`subalgs`maps] *];
+   Anew`subalgs := subalgs;
+  end if;
+  
+  if assigned A`axes then
+    axes := [];
+    for i in [1..#A`axes] do
+      axis := New(AxlAxis);
+      axis`id := Anew!ChangeRing(A`axes[i]`id`elt, F);
+      axis`stab := A`axes[i]`stab;
+      axis`inv := A`axes[i]`inv;
+      axis`even := AssociativeArray();
+      axis`odd := AssociativeArray();
+      
+      for attr in ["odd", "even"] do
+        for key in Keys(A`axes[i]``attr) do
+          axis``attr[ChangeUniverse(key, F)] := sub< Anew`W | [ Anew`W!Eltseq(u) : u in Basis(A`axes[i]``attr[key])]>;
         end for;
       end for;
       Append(~axes, axis);
@@ -356,7 +446,7 @@ intrinsic 'in'(x::ParAxlAlgElt, A::ParAxlAlg) -> BoolElt
   return x`parent eq A;
 end intrinsic;
 
-intrinsic 'in'(x::ParAxlAlgElt, U::ModTupFld) -> BoolElt
+intrinsic 'in'(x::ParAxlAlgElt, U::ModTupRng) -> BoolElt
   {
   Returns whether x is in the subspace U of the partial axial algebra.
   }
@@ -390,9 +480,9 @@ intrinsic IsCoercible(A::ParAxlAlg, x::.) -> BoolElt, .
   if Type(x) eq ParAxlAlgElt and x`parent eq A then
     return true, x;
   end if;
-  n := Dimension(W);
+  n := Degree(W);
   so := false;
-  if (Type(x) eq SeqEnum and #x eq n) or Type(x) eq ModTupFldElt then
+  if (Type(x) eq SeqEnum and #x eq n) or ISA(Type(x), ModTupRngElt) then
     so := IsCoercible(W, x);
   elif Type(x) eq ModGrpElt then
     so := IsCoercible(A`Wmod, x);
@@ -624,7 +714,7 @@ intrinsic IsTimesable(u::ParAxlAlgElt, v::ParAxlAlgElt) -> BoolElt, ParAxlAlgElt
   A := Parent(u);
   require A eq Parent(v): "Both elements do not lie in a common partial axial algebra.";
 
-  if assigned A`V and u in A`V and v in A`V then
+  if assigned A`V and u`elt in A`V and v`elt in A`V then
     return true, Times(u, v);
   end if;
 
@@ -687,22 +777,20 @@ intrinsic FastFunction(L::SetIndx, map::Map:
   return {@ Codomain(map) | v : v in Rows(Matrix(Setseq(L))*matrix)@};
 end intrinsic;
 
-intrinsic FastMatrix(L::SeqEnum, matrix::.) -> SeqEnum
+intrinsic FastMatrix(L::SeqEnum, matrix::Mtrx) -> SeqEnum
   {
   Given a set or sequence of vectors and a matrix, returns the sequence which is the application of the matrix to each.  Uses matrix methods to achieve a speed up.
   }
-  require Type(matrix) in {ModMatFldElt, AlgMatElt, GrpMatElt}: "You have not given a valid matrix.";
   if #L eq 0 then
     return [];
   end if;
   return [ v : v in Rows(Matrix(L)*matrix)];
 end intrinsic;
 
-intrinsic FastMatrix(L::SetIndx, matrix::.) -> SetIndx
+intrinsic FastMatrix(L::SetIndx, matrix::Mtrx) -> SetIndx
   {
   Given a set or sequence of vectors and a homomorphism, returns the set which is the application of the matrix to each.  Uses matrix methods to achieve a speed up.
   }
-  require Type(matrix) in {ModMatFldElt, AlgMatElt, GrpMatElt}: "You have not given a valid matrix.";
   if #L eq 0 then
     return {@@};
   end if;
@@ -729,13 +817,13 @@ intrinsic FastMultiply(L::SeqEnum, v::ParAxlAlgElt) -> SeqEnum
   vv := Coordinates(V, v`elt);
   mat := &+[ Matrix( [vv[i]*A`mult[j,i] : j in [1..Dimension(V)]]) : i in [1..Dimension(V)] | vv[i] ne 0];
   
-  require Type(L[1]) in {ParAxlAlgElt, ModTupFldElt, SeqEnum}: "The list given is not in a partial alxial algebra.";
+  require Type(L[1]) in {ParAxlAlgElt, ModTupFldElt, ModTupRngElt, SeqEnum}: "The list given is not in a partial alxial algebra.";
   if Type(L[1]) eq ParAxlAlgElt then
     L := [ l`elt : l in L];
     require forall{ l : l in L | l in V}: "The list of elements given are not in V.";
     L := [Coordinates(V, l) : l in L];
     return [ A!u : u in FastMatrix(L, mat)];
-  elif Type(L[1]) eq ModTupFldElt then
+  elif ISA(Type(L[1]), ModTupRngElt) then
     require forall{ l : l in L | l in V}: "The list of elements given are not in V.";
     L := [Coordinates(V, l) : l in L];
   end if;
@@ -743,7 +831,7 @@ intrinsic FastMultiply(L::SeqEnum, v::ParAxlAlgElt) -> SeqEnum
   return FastMatrix(L, mat);
 end intrinsic;
 
-intrinsic FastMultiply(A::ParAxlAlg, L::SeqEnum, v::ModTupFldElt) -> SeqEnum
+intrinsic FastMultiply(A::ParAxlAlg, L::SeqEnum, v::ModTupRngElt) -> SeqEnum
   {
   Given a sequence L of vectors, partial axial algebra elements, or sequences of coordinates in V, return the product of these with the partial axial algebra element of A represented by v.
   }
@@ -759,13 +847,13 @@ intrinsic FastMultiply(A::ParAxlAlg, L::SeqEnum, v::ModTupFldElt) -> SeqEnum
   vv := Coordinates(V, v);
   mat := &+[ Matrix( [vv[i]*A`mult[j,i] : j in [1..Dimension(V)]]) : i in [1..Dimension(V)] | vv[i] ne 0];
 
-  require Type(L[1]) in {ParAxlAlgElt, ModTupFldElt, SeqEnum}: "The list given is not in a partial alxial algebra.";
+  require Type(L[1]) in {ParAxlAlgElt, ModTupFldElt, ModTupRngElt, SeqEnum}: "The list given is not in a partial alxial algebra.";
   if Type(L[1]) eq ParAxlAlgElt then
     L := [ l`elt : l in L];
     require forall{ l : l in L | l in V}: "The list of elements given are not in V.";
     L := [Coordinates(V, l) : l in L];
     return [ A!u : u in FastMatrix(L, mat)];
-  elif Type(L[1]) eq ModTupFldElt then
+  elif ISA(Type(L[1]), ModTupRngElt) then
     require forall{ l : l in L | l in V}: "The list of elements given are not in V.";
     L := [Coordinates(V, l) : l in L];
   end if;
@@ -787,13 +875,13 @@ intrinsic FastMultiply(A::ParAxlAlg, L::SeqEnum, v::SeqEnum) -> SeqEnum
 
   mat := &+[ Matrix( [v[i]*A`mult[j,i] : j in [1..Dimension(V)]]) : i in [1..Dimension(V)] | v[i] ne 0];
 
-  require Type(L[1]) in {ParAxlAlgElt, ModTupFldElt, SeqEnum}: "The list given is not in a partial alxial algebra.";
+  require Type(L[1]) in {ParAxlAlgElt, ModTupFldElt, ModTupRngElt, SeqEnum}: "The list given is not in a partial alxial algebra.";
   if Type(L[1]) eq ParAxlAlgElt then
     L := [ l`elt : l in L];
     require forall{ l : l in L | l in V}: "The list of elements given are not in V.";
     L := [Coordinates(V, l) : l in L];
     return [ A!u : u in FastMatrix(L, mat)];
-  elif Type(L[1]) eq ModTupFldElt then
+  elif ISA(Type(L[1]), ModTupRngElt) then
     require forall{ l : l in L | l in V}: "The list of elements given are not in V.";
     L := [Coordinates(V, l) : l in L];
   end if;
@@ -816,11 +904,11 @@ intrinsic BulkMultiply(A::ParAxlAlg, L::SeqEnum) -> SeqEnum
     return [ A`W!0 : i in [1..(#L*(#L+1) div 2)]];
   end if;
   
-  require Type(L[1]) in {ParAxlAlgElt, ModTupFldElt, SeqEnum}: "The elements given do not represent elements of A.";
+  require Type(L[1]) in {ParAxlAlgElt, ModTupFldElt, ModTupRngElt, SeqEnum}: "The elements given do not represent elements of A.";
   if Type(L[1]) eq ParAxlAlgElt then
     require Universe(L) eq A and forall{ l : l in L | l`elt in V}: "The list of elements given are not in V.";
     L := [ Coordinates(V, l`elt) : l in L];
-  elif Type(L[1]) eq ModTupFldElt then
+  elif ISA(Type(L[1]), ModTupRngElt) then
     require forall{ l : l in L | l in V}: "The list of elements given are not in V.";
     L := [Coordinates(V, l) : l in L];
   end if;
@@ -840,12 +928,12 @@ intrinsic BulkMultiply(A::ParAxlAlg, L::SeqEnum, M::SeqEnum) -> SeqEnum
   end if;
   
   require Type(L) eq Type(M): "The two lists have different types.";
-  require Type(L[1]) in {ParAxlAlgElt, ModTupFldElt, SeqEnum}: "The elements given do not represent elements of A.";
+  require Type(L[1]) in {ParAxlAlgElt, ModTupFldElt, ModTupRngElt, SeqEnum}: "The elements given do not represent elements of A.";
   if Type(L[1]) eq ParAxlAlgElt then
     require Universe(L) eq A and Universe(M) eq A and forall{ l : l in L | l`elt in V} and forall{ m : m in M | m`elt in V}: "The lists of elements given are not in V.";
     L := [ Coordinates(V, l`elt) : l in L];
     M := [ Coordinates(V, m`elt) : m in M];
-  elif Type(L[1]) eq ModTupFldElt then
+  elif ISA(Type(L[1]), ModTupRngElt) then
     require forall{ l : l in L | l in V} and forall{ m : m in M | m in V}: "The lists of elements given are not in V.";
     L := [Coordinates(V, l) : l in L];
     M := [Coordinates(V, m) : m in M];

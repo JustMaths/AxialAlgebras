@@ -11,7 +11,7 @@ Code to implement a group name which will work in older versions of magma too.
 */
 intrinsic MyGroupName(G::GrpPerm) -> MonStgElt
   {
-  If GroupName is defined in magma (roughly version 2.21 or above) it returns GroupName, otherwise it returns order_num, where <order, num> is given by IdentifyGroup.
+  If GroupName is defined in magma (roughly version 2.21 or above) it returns GroupName, otherwise it returns order_num, where <order, num> is given by IdentifyGroup. A hash is used in place of a colon.
   }
   try
     name := eval("GroupName(G)");
@@ -44,20 +44,20 @@ end intrinsic;
 A function for choosing the filename
 
 */
-intrinsic Filename(Ax::GSet, tau::Map, shape::SeqEnum: field := Rationals()) -> BoolElt, MonStgElt
+intrinsic Filename(Ax::GSet, tau::Map, shape::SeqEnum: field := Rationals(), FT := MonsterFusionTable()) -> BoolElt, MonStgElt
   {
   Find the filename of the saved algebra for Ax, tau, shape if possible.
   }
   shapetype := &cat [ sh[2] : sh in shape];
-  num_axes := &cat [ Sprintf("%o+", #o) : o in Orbits(Group(Ax), Ax)];
-  num_axes := num_axes[1..#num_axes-1];
-  
+  Miy := sub<Group(Ax) | Image(tau)>;
+  num_axes := Join([ IntegerToString(#o) : o in Orbits(Miy, Ax)], "+");
+ 
   // We must check to see if the file already exists, so we know how to get the i right for different taus.  We assume that there is no other matching algebra ie that i:=1
   i := 1;
   
   // first check to see if the directory exists at all
   
-  path := Sprintf("%o/%m/%o/%o", library_location, field, MyGroupName(Group(Ax)), num_axes);
+  path := Sprintf("%o/%o/%m/%o/%o", library_location, FT`directory, field, MyGroupName(Group(Ax)), num_axes);
   if ExistsPath(path) then
     // we must now see if there is already an algebra with the same path with a different tau.
     algs := ls(path);
@@ -85,24 +85,30 @@ intrinsic Filename(A::ParAxlAlg) -> MonStgElt
   {
   Returns a filename of the form
   
-  library_location/field/MyGroupName/number_of_axes/shape_i.json
+  library_location/fusion_table/field/MyGroupName/number_of_axes/shape_i.json
   
   or
   
-  library_location/field/MyGroupName/number_of_axes/shape_i_partial.json
+  library_location/fusion_table/field/MyGroupName/number_of_axes/shape_i_partial.json
   
   if the algebra has not been fully reduced, where i is an index allowing different tau maps.
   }
   shapetype := &cat [ sh[2] : sh in A`shape];
-  num_axes := &cat [ Sprintf("%o+", #o) : o in Orbits(Group(A`GSet), A`GSet)];
-  num_axes := num_axes[1..#num_axes-1];
+  num_axes := Join([ IntegerToString(#o) : o in Orbits(A`Miyamoto_group, A`GSet)], "+");
   
   // We must check to see if the file already exists, so we know how to get the i right for different taus.  We assume that there is no other matching algebra ie that i:=1
   i := 1;
   
+  // The old type didn't have a directory name for the fusion table, so we check and reassign
+  if not assigned A`fusion_table`directory then
+    require A`fusion_table eq MonsterFusionTable(): "You are using a non-Monster fusion table.  Please manually update it to the latest version of fusion tbale with name and directory and try again.";
+    A`fusion_table := MonsterFusionTable();
+  end if;
+  
   // first check to see if the directory exists at all
   
-  path := Sprintf("%o/%m/%o/%o", library_location, BaseField(A), MyGroupName(Group(A)), num_axes);
+  
+  path := Sprintf("%o/%o/%m/%o/%o", library_location, A`fusion_table`directory, BaseRing(A), MyGroupName(Group(A)), num_axes);
   if ExistsPath(path) then
     // we must now see if there is already an algebra with the same path with a different tau.
     algs := ls(path);
@@ -279,7 +285,7 @@ intrinsic ParAxlAlgToList(A::ParAxlAlg: subalgs:=0) -> List
   alg := [* *];
   Append(~alg, <"class", "Partial axial algebra">);
 
-  Append(~alg, <"field", Sprintf("%m", BaseField(A))>);
+  Append(~alg, <"field", Sprintf("%m", BaseRing(A))>);
   Append(~alg, <"GSet", [* [*gen[i], gen[i]@act*] : i in [1..#gen] *]>);
   Append(~alg, <"tau", [* [* i, i@A`tau *] : i in orb_reps *]>);
   Append(~alg, <"shape", [* [* sh[1], sh[2] *] : sh in A`shape *]>);
@@ -347,23 +353,6 @@ intrinsic SubAlgToList(x::SubAlg: subalgs := -1) -> List
 
   return alg;
 end intrinsic;
-/*
-
-Code to serialise a fusion table
-
-*/
-intrinsic FusTabToList(x::FusTab) -> List
-  {
-  Transform a fusion table to a List prior to serialising as a JSON.
-  }
-  alg := [* *];
-  Append(~alg, <"class", "Fusion table">);
-  
-  Append(~alg, <"eigenvalues", Setseq(x`eigenvalues)>);
-  Append(~alg, <"table", x`table>);
-  
-  return alg;
-end intrinsic;
 //
 // =============== Code to load a ParAxlAlg ================
 //
@@ -387,7 +376,7 @@ intrinsic GetTypePartialAxialAlgebra(filename::MonStgElt) -> Tup
   // If the file is small, then we assume it is for an algebra of dimension 0 and open it all.  Otherwise, we just open a the first few lines
   if Size(filename) le 3000 then
     A := LoadPartialAxialAlgebra(filename);
-    return <BaseField(A), A`GSet, A`tau, A`shape, Dimension(A)>;
+    return <BaseRing(A), A`GSet, A`tau, A`shape, Dimension(A)>;
   end if;
 
   file := Open(filename, "r");
@@ -474,6 +463,7 @@ intrinsic PartialAxialAlgebra(alg::Assoc) -> ParAxlAlg
   images := [Numbers(k[2]) : k in alg["GSet"]];
   n := Max(gens[1]);
   G := PermutationGroup<n | gens>;
+  A`group := G;
   m := Max(images[1]);
   act := hom<G -> Sym(m) | [<G!gens[i], Sym(m)!images[i]> : i in [1..#gens]]>;
   
@@ -491,22 +481,20 @@ intrinsic PartialAxialAlgebra(alg::Assoc) -> ParAxlAlg
   end for;
   
   A`tau := map<Ax->G | images>;
+  Miy := sub<G | Image(A`tau)>;
+  A`Miyamoto_group := Miy;
   
   A`shape := [ < {@ i : i in Numbers(sh[1])@}, sh[2]> : sh in alg["shape"] ];
 
   A`number_of_axes := #Ax;
 
-  dim := #alg["Wmod"][1,2];
-  A`Wmod := GModule(G, MatrixAlgebra<F, dim | [ Matrix(F,alg["Wmod"][i,2]) : i in [1..#gens]]>);
+  mats := [ Matrix(F, alg["Wmod"][i,2]) : i in [1..#gens]];
+  A`Wmod := GModule(G, MatrixAlgebra<F, Nrows(mats[1]) | mats >);
 
   A`W := RSpace(F, Dimension(A`Wmod));
   A`V := sub<A`W | [Numbers(v): v in alg["V"]]>;
 
-  require "class" in Keys(alg["table"]) and alg["table"]["class"] eq "Fusion table": "The file given does not have a valid fusion table.";
-  FT := New(FusTab);
-  FT`eigenvalues := IndexedSet(Numbers(alg["table"]["eigenvalues"]));
-  FT`table := [ [ IndexedSet(Numbers(S)) : S in row ] : row in alg["table"]["table"]];
-  A`fusion_table := FT;
+  A`fusion_table := FusionTable(alg["table"]);
 
   if "mult" notin keys then
     assert Dimension(A) eq 0;
@@ -573,20 +561,20 @@ end intrinsic;
 Loads all axial algebras with a given group
 
 */
-intrinsic LoadAllGroup(G::GrpPerm :field := Rationals(), library := library_location, partial:=false) -> SeqEnum
+intrinsic LoadAllGroup(G::GrpPerm :field := Rationals(), FT:= MonsterFusionTable(), library := library_location, partial:=false) -> SeqEnum
   {
   Returns all partial axial algebras with group G.
   }
-  return LoadAllGroup(MyGroupName(G): field := field, library:=library, partial:=partial);
+  return LoadAllGroup(MyGroupName(G): field := field, FT:= FT, library:=library, partial:=partial);
 end intrinsic;
 
-intrinsic LoadAllGroup(grp_name::MonStgElt :field := Rationals(), library := library_location, partial:=false) -> SeqEnum
+intrinsic LoadAllGroup(grp_name::MonStgElt :field := Rationals(), FT:= MonsterFusionTable(), library := library_location, partial:=false) -> SeqEnum
   {
   Returns all partial axial algebras with groupname grp_name.
   }
   // magma/linux/something screws up directorynames with colons, so we sustitute
   grp_name := Join(Split(grp_name, ":"), "#");
-  path := Sprintf("%o/%m/%o", library, field, grp_name);
+  path := Sprintf("%o/%o/%m/%o", library, FT`directory, field, grp_name);
   if not ExistsPath(path) then
     return [];
   end if;

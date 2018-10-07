@@ -171,12 +171,17 @@ intrinsic Properties(A::ParAxlAlg) -> List
   so, F, m := HasFrobeniusForm(A);
   
   if so then
-    pos := IsPositiveDefinite(F);
-    if not pos then
-      semipos := IsPositiveSemiDefinite(F);
-    else
-      semipos := pos;
-    end if;
+    try
+      pos := IsPositiveDefinite(F);
+      if not pos then
+        semipos := IsPositiveSemiDefinite(F);
+      else
+        semipos := pos;
+      end if;
+    catch e
+      pos := false;
+      semipos := false;
+    end try;
   else
     pos := so;
     semipos := pos;

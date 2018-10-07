@@ -295,7 +295,9 @@ intrinsic ReduceSaturated(A::ParAxlAlg, U::ModTupFld) -> ParAxlAlg, Map
   
   images := FastMatrix(Image(A`GSet_to_axes), psi_mat);
   Anew`GSet_to_axes := map<Anew`GSet -> Wnew | [ <i, images[i]> : i in Anew`GSet]>;
-
+  Anew`group := A`group;
+  Anew`Miyamoto_group := A`Miyamoto_group;
+  
   vprintf ParAxlAlg, 4: "Time taken to build modules and vector spaces %o.\n", Cputime(tt);
   
   tt := Cputime();  
@@ -506,7 +508,7 @@ intrinsic ExpandSpace(A::ParAxlAlg: implement := true) -> ParAxlAlg, Map
   Wmodnew, injs := DirectSum([C2mod, VCmod, Wmod]);
 
   // We build the corresponding vector spaces and maps
-  Wnew := RSpace(BaseField(A), Dimension(Wmodnew));
+  Wnew := RSpace(BaseRing(A), Dimension(Wmodnew));
   C := RSpaceWithBasis([ W | Wmod!(Cmod.i) : i in [1..Dimension(Cmod)]]);
 
   WtoWnew_mat := MapToMatrix(injs[3]);
@@ -521,6 +523,8 @@ intrinsic ExpandSpace(A::ParAxlAlg: implement := true) -> ParAxlAlg, Map
   Anew`number_of_axes := A`number_of_axes;
   Anew`fusion_table := A`fusion_table;
   Anew`rels := {@ Wnew | @};
+  Anew`group := A`group;
+  Anew`Miyamoto_group := A`Miyamoto_group;
   
   Anew`Wmod := Wmodnew;
   Anew`W := Wnew;
@@ -545,7 +549,7 @@ intrinsic ExpandSpace(A::ParAxlAlg: implement := true) -> ParAxlAlg, Map
   if dimV eq 0 or dimC eq 0 then
     prodsVC := [ Wnew!0 : i in [1..(#decomp*(#decomp+1) div 2)]];
   else
-    VC := RSpace(BaseField(W), Dimension(VCmod));
+    VC := RSpace(BaseRing(A), Dimension(VCmod));
     VCmult := [ [VC.(dimC*(i-1)+j) : j in [1..dimC]]: i in [1..dimV]];
     VCtoWnew_mat := MapToMatrix(injs[2]);
     newVCmult := BulkMultiply(VCmult, decompV, decompC);
@@ -558,7 +562,7 @@ intrinsic ExpandSpace(A::ParAxlAlg: implement := true) -> ParAxlAlg, Map
   // This is a little faster on 2nd expansion for PSL(2,11).
   // Check speeds after fixing BulkMupltiply to do symmetric stuff.
   
-  C2 := RSpace(BaseField(W), Dimension(C2mod));
+  C2 := RSpace(BaseRing(A), Dimension(C2mod));
   C2mult2 := [ [C2.ijpos(i,j,dimC) : j in [1..dimC]]: i in [1..dimC]];
   prodsC22 := BulkMultiply(C2mult2, decompC, decompC);
   C2toWnew_mat := MapToMatrix(injs[1]);

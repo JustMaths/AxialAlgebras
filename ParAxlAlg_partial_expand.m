@@ -127,7 +127,7 @@ intrinsic PartialExpandSpace(A::ParAxlAlg, U::ModTupFld) -> ParAxlAlg, Map
   Wmodnew, injs := DirectSum([X2mod, VxXmod, Wmod]);
   
   // We build the corresponding vector spaces and maps
-  Wnew := RSpace(BaseField(A), Dimension(Wmodnew));
+  Wnew := RSpace(BaseRing(A), Dimension(Wmodnew));
   X := RSpaceWithBasis([ W | Wmod!(Xmod.i) : i in [1..Dimension(Xmod)]]);
   VX := V+X;
   
@@ -145,6 +145,8 @@ intrinsic PartialExpandSpace(A::ParAxlAlg, U::ModTupFld) -> ParAxlAlg, Map
   Anew`number_of_axes := A`number_of_axes;
   Anew`fusion_table := A`fusion_table;
   Anew`rels := {@ Wnew | @};
+  Anew`group := A`group;
+  Anew`Miyamoto_group := A`Miyamoto_group;
   
   Anew`Wmod := Wmodnew;
   Anew`W := Wnew;
@@ -159,7 +161,7 @@ intrinsic PartialExpandSpace(A::ParAxlAlg, U::ModTupFld) -> ParAxlAlg, Map
   dimV := Dimension(V);
   dimX := Dimension(X);
   
-  VxX := RSpace(BaseField(W), Dimension(VxXmod));
+  VxX := RSpace(BaseRing(A), Dimension(VxXmod));
   VxXmult := [ [VxX.(dimX*(i-1)+j) : j in [1..dimX]]: i in [1..dimV]];
   VxXtoWnew_mat := MapToMatrix(injs[2]);
   

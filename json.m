@@ -125,6 +125,43 @@ intrinsic JSON(x::FldFinElt : nl:="\n") -> MonStgElt
   return IntegerToString(ZZ!x);
 end intrinsic;
 
+intrinsic JSON(x::RngUPolElt : nl:="\n") -> MonStgElt
+  {
+  Serialise an element of a univariate polynomial ring, as a sequence of integers.
+  }
+  B := BaseRing(Parent(x));
+  if x in B then
+    return JSON(B!x);
+  else
+    return JSON(Eltseq(x));
+  end if;
+end intrinsic;
+
+intrinsic JSON(x::RngMPolElt : nl:="\n") -> MonStgElt
+  {
+  Serialise an element of a multivariate polynomial ring.
+  }
+  B := BaseRing(Parent(x));
+  if x in B then
+    return JSON(B!x);
+  else
+    c, m := CoefficientsAndMonomials(x);
+    return JSON([* <"class", "RngMPolElt">, <"coeffs", c>, <"monomials", [ Exponents(p) : p in m]> *]);
+  end if;
+end intrinsic;
+
+intrinsic JSON(x::FldFunRatElt : nl:="\n") -> MonStgElt
+  {
+  Serialise an element of a function field.
+  }
+  B := BaseRing(Parent(x));
+  if x in B then
+    return JSON(B!x);
+  else
+    return JSON([* <"class", "FldFunRatElt">, <"num", Numerator(x)>, <"denom", Denominator(x)> *]);
+  end if;
+end intrinsic;
+
 intrinsic JSON(x::BoolElt : nl:="\n") -> MonStgElt
   {
   Serialise a Boolean.
@@ -159,13 +196,37 @@ intrinsic JSON(x::AlgMatElt : nl:="\n") -> MonStgElt
     return "[ ]";
   end if;
   B := BaseRing(x);
-  require IsField(B) select IsPrimeField(B) else B eq ZZ : "Base ring of matrix must be ZZ, QQ, or GF(p) in JSON";
+  // require IsField(B) select IsPrimeField(B) else B eq ZZ : "Base ring of matrix must be ZZ, QQ, or GF(p) in JSON";
   rs := [Eltseq(r):r in Rows(x)];
-  strs := [[x in ZZ select IntegerToString(ZZ!x) else Sprintf("\"%o\"",x):x in r]:r in rs];
-  f := Sprintf("%%%oo", Max([#s:s in r,r in strs]));
-  strs := [[Sprintf(f,s):s in r]:r in strs];
-  newnl := nl cat indent;
-  return "[" cat newnl cat Join(["[ " cat Join(r, ", ") cat " ]":r in strs], "," cat newnl) cat nl cat "]";
+  if (IsField(B) and IsPrimeField(B)) or B cmpeq ZZ then
+    strs := [[x in ZZ select IntegerToString(ZZ!x) else Sprintf("\"%o\"",x):x in r]:r in rs];
+    f := Sprintf("%%%oo", Max([#s:s in r,r in strs]));
+    strs := [[Sprintf(f,s):s in r]:r in strs];
+    newnl := nl cat indent;
+    return "[" cat newnl cat Join(["[ " cat Join(r, ", ") cat " ]":r in strs], "," cat newnl) cat nl cat "]";
+  else
+    vals := Eltseq(x);
+    mat := [* <"class", "Matrix">,
+            <"field", Sprintf("%m", BaseRing(x))>,
+            <"rows", NumberOfRows(x)>,
+            <"columns", NumberOfColumns(x)>,
+            <"values", vals >*];
+    // [* <i,Eltseq(vals[i])> : i in [1..#vals]*]>*];
+    return JSON(mat: nl:=nl);
+  end if;
+end intrinsic;
+
+intrinsic JSON(M::MtrxSprs : nl:="\n") -> MonStgElt
+  {
+  Serialise a sparse matrix (over ZZ, QQ, or GF(p)) as a class with field, number of rows, number of columns and a list of [r,c,v].
+  }
+  mat := [* <"class", "Sparse Matrix">,
+            <"field", Sprintf("%m", BaseRing(M))>,
+            <"rows", NumberOfRows(M)>,
+            <"columns", NumberOfColumns(M)>,
+            <"values", [* [* t[1], t[2], t[3] *] : t in Eltseq(M)*]>*];
+
+  return JSON(mat: nl:=nl);
 end intrinsic;
 
 // Useful functions for undoing JSONisation
@@ -186,6 +247,36 @@ intrinsic Numbers(x::Any) -> Any
   elif Type(x) eq MonStgElt and Regexp("^0|-?[1-9][0-9]*(/[1-9][0-9]*)?$", x) then
     x := StringToRational(x);
     return x in ZZ select ZZ!x else x;
+  elif Type(x) eq Assoc and "class" in Keys(x) and x["class"] eq "RngMPolElt" then
+    c := Numbers(x["coeffs"]);
+    m := Numbers(x["monomials"]);
+    if #c eq 0 then
+      return ZZ!0;
+    end if;
+    F := Universe(c);
+    P := PolynomialRing(F, #m[1]);
+    return Polynomial(c, [Monomial(P, p) : p in m]);
+  elif Type(x) eq Assoc and "class" in Keys(x) and x["class"] eq "FldFunRatElt" then
+    n := Numbers(x["num"]);
+    d := Numbers(x["denom"]);
+    // We need to find the correct base field to coerce them both into.
+    // n is either a sequence, in which case it represents a polynomial, or a number, or is in a polynomial ring.
+    Pd := Type(d) eq SeqEnum select Universe(d) else Parent(d);
+    Pn := Type(n) eq SeqEnum select n eq [] select Pd else Universe(n) else Parent(n);
+    
+    if Type(n) eq SeqEnum or Type(d) eq SeqEnum then
+      // We have a univariate polynomial ring
+      B := Pn subset Pd select Pd else Pn;
+      F := FunctionField(B);
+    elif Type(n) eq RngMPolElt or Type(d) eq RngMPolElt then
+      // One could be an integer type
+      P := Type(d) eq RngMPolElt select Pd else Pn;
+      F := FieldOfFractions(P);
+    else
+      // Both are numbers
+      F := Pn subset Pd select Pd else Pn;
+    end if;
+    return F!n/F!d;
   else
     return x;
   end if;
@@ -206,7 +297,39 @@ intrinsic Matrix(R::Rng, M::List) -> Any
   {
   Convert a JSONised matrix into a matrix over R.
   }
-  return Matrix(R, [[R!Num(x):x in r]:r in M]);
+  return Matrix(R, [[R!Numbers(x):x in r]:r in M]);
+end intrinsic;
+
+intrinsic Matrix(R::Rng, M::Assoc) -> Any
+  {
+  Convert a JSONised matrix into a matrix over R.
+  }
+  keys := Keys(M);
+  require "class" in keys and M["class"] eq "Matrix": "The file given does not encode a matrix.";
+  require keys eq {"class", "field", "rows", "columns", "values"}: "Invalid JSON format for a matrix";
+  
+  F := eval(M["field"]);
+  assert R eq F;
+  n := Numbers(M["rows"]);
+  m := Numbers(M["columns"]);
+  
+  return Matrix(F, n, m, [ F!Numbers(v) : v in M["values"]]);
+end intrinsic;
+
+intrinsic SparseMatrix(R::Rng, M::Assoc) -> Any
+  {
+  Convert a JSONised sparse matrix into a sparse matrix over R.
+  }
+  keys := Keys(M);
+  require "class" in keys and M["class"] eq "Sparse Matrix": "The file given does not encode a sparse matrix.";
+  require keys eq {"class", "field", "rows", "columns", "values"}: "Invalid JSON format for a sparse matrix";
+  
+  F := eval(M["field"]);
+  assert R eq F;
+  n := Numbers(M["rows"]);
+  m := Numbers(M["columns"]);
+  
+  return SparseMatrix(F, n, m, [ <x[1], x[2], Numbers(x[3])> : x in M["values"]]);
 end intrinsic;
 
 /*
