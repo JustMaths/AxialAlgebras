@@ -9,22 +9,21 @@ intrinsic SearchPartialExpansions(A::ParAxlAlg) -> ParAxlAlg
   }
   t := Cputime();
   G := Group(A);
-  W := A`W;
   Wmod := A`Wmod;
-  V := A`V;
   
   ip := GetInnerProduct(Wmod);
-  Vmod := sub<Wmod | [Wmod | v : v in Basis(V)]>;
+  Vmod := sub<Wmod | [Wmod | v : v in Basis(A`V)]>;
   Cmod := Complement(Wmod, Vmod: ip:=ip);
 
   tt := Cputime();
   vprint ParAxlAlg, 4: "Finding indecomposable summands to partially expand by.";
   mods := IndecomposableSummands(Cmod);
-  vprintf ParAxlAlg, 4: "Time taken: %o", Cputime(tt);
+  vprintf ParAxlAlg, 4: "Time taken: %o\n", Cputime(tt);
 
   // loop over the modules in mods adding one at a time and pulling back any relations or eigenvectors
-  
-  for U in mods do
+
+  while #mods ne 0 do
+    U := mods[1];
     print U;
     Apar, phi := PartialExpandSpace(A, sub<A`W| [A`W!A`Wmod!u : u in Basis(U)]>);
 
@@ -42,7 +41,7 @@ intrinsic SearchPartialExpansions(A::ParAxlAlg) -> ParAxlAlg
       end if;
       Coeffs := {@ Coordinates(ImW, v) : v in Basis(ImWR)@};
       A`rels join:= FastMatrix(Coeffs, pullback);
-      vprint ParAxlAlg, 2: "Found new relations.\n";
+      vprint ParAxlAlg, 2: "Found new relations.";
     end if;
     for i in [1..#Apar`axes] do
       for attr in {@ "odd", "even"@}, key in Keys(Apar`axes[i]``attr) do
@@ -52,15 +51,27 @@ intrinsic SearchPartialExpansions(A::ParAxlAlg) -> ParAxlAlg
             pullback := Matrix([ ImW.i@@phi : i in [1..Dimension(ImW)]]);
           end if;
           Coeffs := [ Coordinates(ImW, v) : v in Basis(Eig)];
-          A`axes[i]``attr[key] +:= sub<W| FastMatrix(Coeffs, pullback)>;
+          A`axes[i]``attr[key] +:= sub<A`W| FastMatrix(Coeffs, pullback)>;
           vprintf ParAxlAlg, 2: "Found new eigenvalues for %o\n", key;
         end if;
       end for;
     end for;
+    // Currently we can only partial expand when there are no relations.  So, we must mod out by them.  FIX THIS!!
+    if #A`rels ne 0 then
+      Anew, quo := ImplementRelations(A);
+      quomat := MapToMatrix(quo);
+      // quomod := hom<A`Wmod -> Anew`Wmod | quomat>;
+      // mods := [ Unew : j in [1..#mods] | Dimension(Unew) ne 0 where Unew := (mods[j])@quomod ];
+      mods := [ Unew : j in [1..#mods] | Dimension(Unew) ne 0
+           and not sub<Anew`W | [Anew`W!Anew`Wmod!u : u in Basis(Unew)]> subset Anew`V
+           where Unew := sub<Anew`Wmod | FastMatrix([ A`Wmod!u : u in Basis(mods[j])], quomat)> ];
+      A := Anew;
+    end if;
     if assigned pullback then
       delete pullback;
     end if;
-  end for;
+    Remove(~mods, 1);
+  end while;
 
   return A;
 end intrinsic;
@@ -91,7 +102,7 @@ intrinsic PartialExpandSpace(A::ParAxlAlg, U::ModTupFld) -> ParAxlAlg, Map
   Wmod := A`Wmod;
   V := A`V;
   
-  require Dimension(A`rels) eq 0: "There are still relations to be modded out by";
+  require #A`rels eq 0: "There are still relations to be modded out by";
   require not U subset (sub<W|A`rels> + V): "There is nothing to expand by.";
   
   vprintf ParAxlAlg, 1: "Partially expanding space from %o dimensions.\n", Dimension(A);
@@ -116,7 +127,7 @@ intrinsic PartialExpandSpace(A::ParAxlAlg, U::ModTupFld) -> ParAxlAlg, Map
   Wmodnew, injs := DirectSum([X2mod, VxXmod, Wmod]);
   
   // We build the corresponding vector spaces and maps
-  Wnew := RSpace(BaseField(A), Dimension(Wmodnew));
+  Wnew := RSpace(BaseRing(A), Dimension(Wmodnew));
   X := RSpaceWithBasis([ W | Wmod!(Xmod.i) : i in [1..Dimension(Xmod)]]);
   VX := V+X;
   
@@ -134,11 +145,14 @@ intrinsic PartialExpandSpace(A::ParAxlAlg, U::ModTupFld) -> ParAxlAlg, Map
   Anew`number_of_axes := A`number_of_axes;
   Anew`fusion_table := A`fusion_table;
   Anew`rels := {@ Wnew | @};
+  Anew`group := A`group;
+  Anew`Miyamoto_group := A`Miyamoto_group;
   
   Anew`Wmod := Wmodnew;
   Anew`W := Wnew;
   Anew`V := (VX)@WtoWnew;
   vprintf ParAxlAlg, 4: "Time taken to build modules and vector spaces %o.\n", Cputime(tt);
+  vprintf ParAxlAlg, 4: "Module dimension is %o.\n", Dimension(Anew`W);
   
   vprint ParAxlAlg, 2: "  Building the multiplication.";
   tt := Cputime();
@@ -148,7 +162,7 @@ intrinsic PartialExpandSpace(A::ParAxlAlg, U::ModTupFld) -> ParAxlAlg, Map
   dimV := Dimension(V);
   dimX := Dimension(X);
   
-  VxX := RSpace(BaseField(W), Dimension(VxXmod));
+  VxX := RSpace(BaseRing(A), Dimension(VxXmod));
   VxXmult := [ [VxX.(dimX*(i-1)+j) : j in [1..dimX]]: i in [1..dimV]];
   VxXtoWnew_mat := MapToMatrix(injs[2]);
   

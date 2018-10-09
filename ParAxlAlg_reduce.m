@@ -122,7 +122,7 @@ end intrinsic;
 U is a subspace which we want to mod out by.  Therefore we may also mod out by v*u for any u in U and v in V.  We grow the subspace U by doing this.
 
 */
-intrinsic SaturateSubspace(A::ParAxlAlg, U::ModTupFld: starting := sub<A`W|>) -> ModTupFld
+intrinsic SaturateSubspace(A::ParAxlAlg, U::ModTupRng: starting := sub<A`W|>) -> ModTupRng
   {
   Add products of U \cap V with V to U until it saturates, also using the action of G.  Has an optional argument of a starting subspace which we assume to be saturated.
   }
@@ -295,8 +295,11 @@ intrinsic ReduceSaturated(A::ParAxlAlg, U::ModTupFld) -> ParAxlAlg, Map
   
   images := FastMatrix(Image(A`GSet_to_axes), psi_mat);
   Anew`GSet_to_axes := map<Anew`GSet -> Wnew | [ <i, images[i]> : i in Anew`GSet]>;
-
+  Anew`group := A`group;
+  Anew`Miyamoto_group := A`Miyamoto_group;
+  
   vprintf ParAxlAlg, 4: "Time taken to build modules and vector spaces %o.\n", Cputime(tt);
+  vprintf ParAxlAlg, 4: "Module dimension is %o.\n", Dimension(Anew`W);
   
   tt := Cputime();  
   UpdateAxes(A, ~Anew, psi: matrix := psi_mat);
@@ -506,7 +509,7 @@ intrinsic ExpandSpace(A::ParAxlAlg: implement := true) -> ParAxlAlg, Map
   Wmodnew, injs := DirectSum([C2mod, VCmod, Wmod]);
 
   // We build the corresponding vector spaces and maps
-  Wnew := RSpace(BaseField(A), Dimension(Wmodnew));
+  Wnew := RSpace(BaseRing(A), Dimension(Wmodnew));
   C := RSpaceWithBasis([ W | Wmod!(Cmod.i) : i in [1..Dimension(Cmod)]]);
 
   WtoWnew_mat := MapToMatrix(injs[3]);
@@ -521,6 +524,8 @@ intrinsic ExpandSpace(A::ParAxlAlg: implement := true) -> ParAxlAlg, Map
   Anew`number_of_axes := A`number_of_axes;
   Anew`fusion_table := A`fusion_table;
   Anew`rels := {@ Wnew | @};
+  Anew`group := A`group;
+  Anew`Miyamoto_group := A`Miyamoto_group;
   
   Anew`Wmod := Wmodnew;
   Anew`W := Wnew;
@@ -529,9 +534,6 @@ intrinsic ExpandSpace(A::ParAxlAlg: implement := true) -> ParAxlAlg, Map
 
   vprint ParAxlAlg, 2: "  Building the multiplication.";
   tt := Cputime();
-
-  // We begin by defining two function which we will use to multiply quickly. We use these both in defining the multiplication of Anew and also when building the odd and even parts.
-  // precompute mult matrices for VC and C2
   
   // We precompute the decompositions
   decomp := DecomposeVectorsWithInnerProduct(V, Basis(W): ip:=ip);
@@ -548,7 +550,7 @@ intrinsic ExpandSpace(A::ParAxlAlg: implement := true) -> ParAxlAlg, Map
   if dimV eq 0 or dimC eq 0 then
     prodsVC := [ Wnew!0 : i in [1..(#decomp*(#decomp+1) div 2)]];
   else
-    VC := RSpace(BaseField(W), Dimension(VCmod));
+    VC := RSpace(BaseRing(A), Dimension(VCmod));
     VCmult := [ [VC.(dimC*(i-1)+j) : j in [1..dimC]]: i in [1..dimV]];
     VCtoWnew_mat := MapToMatrix(injs[2]);
     newVCmult := BulkMultiply(VCmult, decompV, decompC);
@@ -561,7 +563,7 @@ intrinsic ExpandSpace(A::ParAxlAlg: implement := true) -> ParAxlAlg, Map
   // This is a little faster on 2nd expansion for PSL(2,11).
   // Check speeds after fixing BulkMupltiply to do symmetric stuff.
   
-  C2 := RSpace(BaseField(W), Dimension(C2mod));
+  C2 := RSpace(BaseRing(A), Dimension(C2mod));
   C2mult2 := [ [C2.ijpos(i,j,dimC) : j in [1..dimC]]: i in [1..dimC]];
   prodsC22 := BulkMultiply(C2mult2, decompC, decompC);
   C2toWnew_mat := MapToMatrix(injs[1]);

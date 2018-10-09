@@ -3,12 +3,31 @@
 ========================== SHAPES =============================
 
 */
+import "ParAxlAlg.m": library_location;
 /*
 
 A function for sorting the shapes
 
 */
 ShapeSort := func<x,y | x[1] gt y[1] select -1 else x[1] lt y[1] select 1 else x[2] gt y[2] select 1 else x[2] lt y[2] select -1 else 0>;
+/*
+
+A function for sorting the tau maps, so we get a deterministic tau map
+
+*/
+function TauSort(f, g)
+  X := Domain(f);
+  for i in [1..#X] do
+    imf := Eltseq(i@f);
+    img := Eltseq(i@g);
+    if imf lt img then
+      return -1;
+    elif imf gt img then
+      return 1;
+    end if;
+  end for;
+  return 0;
+end function;
 //
 // ================= FINDING THE SHAPE ===================
 //
@@ -134,6 +153,43 @@ intrinsic IsAdmissibleTauMap(Ax::GSet, tau::Map) -> BoolElt
 end intrinsic;
 /*
 
+Return the action on a set of tau maps
+
+*/
+intrinsic TauAction(Ax::GSet, tau_maps::SetIndx) -> GSet
+  {
+  Given a GSet Ax and a set of tau-maps on Ax, find the induced action on the tau maps.
+  }
+  G := Group(Ax);
+  orbs := Orbits(G, Ax);
+  phi, GG := Action(G, Ax);
+  GAx := Stabiliser(Sym(#Ax), Set(orbs));
+  N := Normaliser(GAx, GG);
+  // N is the automorphism group of the action of G on Ax
+  
+  // We must define equality of maps
+  
+  orb_reps := [Representative(o) : o in orbs];
+  MapEq := function(f,g)
+    return forall{i: i in orb_reps | i@f eq i@g};
+  end function;
+  
+  tau_return := function(f)
+    assert exists(g){g : g in tau_maps | MapEq(f,g)};
+    return g;
+  end function;
+  
+  // The action on tau maps is
+  // tau_n := tau(i^(n^-1))^n
+  
+  tausxN := CartesianProduct(tau_maps, N);
+  f := map< tausxN -> tau_maps | y :-> tau_return(map<Ax-> G | i:-> ((((i^(y[2]^-1))@y[1])@phi)^y[2])@@phi >) >;
+  Taus := GSet(N, tau_maps, f);
+  
+  return Taus;
+end intrinsic;
+/*
+
 Given a GSet Ax, returns the admissible tau maps together with their stabilisers.
 
 */
@@ -195,30 +251,16 @@ intrinsic AdmissibleTauMaps(Ax::GSet) -> SeqEnum
   
   // We now wish to dedupe the set of tau maps using the automorphisms of Ax
   
-  phi, GG := Action(G, Ax);
-  GAx := Stabiliser(Sym(#Ax), Set(orbs));
-  N := Normaliser(GAx, GG);
-  // N is the automorphism group of the action of G on Ax
+  Taus := TauAction(Ax, tau_maps);
+  N := Group(Taus);
+
+  // We wish to get a deterministic algorithm, so we sort the tau-maps
+
+  Taus_orbs := [ Sort(o, TauSort) : o in Orbits(N, Taus)];
+  Taus_orb_reps := Sort([o[1] : o in Taus_orbs], TauSort);
   
-  // We must define equality of maps
-  
-  MapEq := function(f,g)
-    return forall{i: i in orb_reps | i@f eq i@g};
-  end function;
-  
-  tau_return := function(f)
-    assert exists(g){g : g in tau_maps | MapEq(f,g)};
-    return g;
-  end function;
-  
-  // The action on tau maps is
-  // tau_n := tau(i^(n^-1))^n
-  
-  tausxN := CartesianProduct(tau_maps, N);
-  f := map< tausxN -> tau_maps | y :-> tau_return(map<Ax-> G | i:-> ((((i^(y[2]^-1))@y[1])@phi)^y[2])@@phi >) >;
-  Taus := GSet(N, tau_maps, f);
-  
-  return [ <tau, Stabiliser(N, Taus, tau)> : tau in [ o[1] : o in Orbits(N, Taus)]];
+  return [ <tau, Stabiliser(N, Taus, tau)> where tau := Taus_orb_reps[i]
+              : i in [1..#Taus_orb_reps]];
 end intrinsic;
 /*
 
@@ -233,14 +275,14 @@ FindMinRep := function(orb, L, Ax)
   return pair;
 end function;
 
-intrinsic FindShapeConnectedComponents(Ax::GSet, tau::Map, K::GrpPerm, axes::SetIndx) -> SeqEnum, SeqEnum
+intrinsic FindShapeConnectedComponents(Ax::GSet, tau::Map, axes::SetIndx: K := sub<Group(Ax) | [i@tau : i in axes]>) -> SeqEnum, SeqEnum
   {
   axes is a set of K-invariant axes, where the action is given by Ax and tau is an admissible tau-map.  We find the connected components of the graph on the dihedral subalgeras on axes.
   
   We return two sequences.  The elements of the second are sequences which represent the connected components.  Each connected component is a sequence of tuples < o, orbit>, where orbit is the orbit of o under K. The first is a sequence of representatives for the second.
   }
   require axes subset Ax: "The set of axes given is not a subset of the GSet.";
-  require K subset Group(Ax): "The group does not act on the given GSet.";
+  require K subset sub<Group(Ax) | [i@tau : i in axes]>: "K must be a subgroup of the Miyamoto group.";
   require OrbitClosure(K, Ax, axes) eq axes: "The axes are not invariant under the group.";
 
   Sort(~axes);
@@ -284,8 +326,10 @@ intrinsic Shapes(Ax::GSet, tau::Map, stab::GrpPerm) -> SeqEnum
   Given a GSet Ax and a tau map, we find all the possible shapes of algebra.
   }
   G := Group(Ax);
+  Miy := sub<G | Image(tau)>;
+  ReduceGenerators(~Miy);
   
-  defining_shape_reps, defining_shapes := FindShapeConnectedComponents(Ax, tau, G, Ax);
+  defining_shape_reps, defining_shapes := FindShapeConnectedComponents(Ax, tau, Ax: K := Miy);
   
   // Now we need to pick the possible choices for each connected component
 
@@ -366,10 +410,12 @@ end intrinsic;
 
 Checks isomorphism of shapes.
 
+NB this will automatically restrict to an automorphism of the Miyamoto groups.
+
 */
 intrinsic IsIsomorphic(Ax1::GSet, tau1::Map, shape1::SeqEnum, Ax2::GSet, tau2::Map, shape2::SeqEnum) -> BoolElt, GrpPermElt, Map
   {
-  Tests if the shape defined by Ax1, tau1, and shape1 is isomorphic to the one defined by Ax2, tau2, shape2.  If so, it returns a pair, perm in Sym(|Ax1|) and homg:G1->G2 such that
+  Tests if the shape defined by Ax1, tau1, and shape1 is isomorphic to the one defined by Ax2, tau2, shape2.  If so, it returns a pair, perm in Sym(|Ax1|) and homg:Miy1->Miy2 such that
   
   (i^g)^perm = (i^perm)^(g@homg) for all g in G1.
   
@@ -378,26 +424,26 @@ intrinsic IsIsomorphic(Ax1::GSet, tau1::Map, shape1::SeqEnum, Ax2::GSet, tau2::M
   and perm maps shape1 to shape2.
   }
   if #Ax1 ne #Ax2 then
-    return false, _, _, _;
+    return false, _, _;
   end if;
   
   // Find the equivalence between the GSets
-  G1 := Group(Ax1);
-  G2 := Group(Ax2);
-  act1, GG1 := Action(G1, Ax1);
-  act2, GG2 := Action(G2, Ax2);
+  Miy1 := sub<Group(Ax1) | Image(tau1)>;
+  Miy2 := sub<Group(Ax2) | Image(tau2)>;
+  act1, GG1 := Action(Miy1, Ax1);
+  act2, GG2 := Action(Miy2, Ax2);
   so, perm := IsConjugate(Sym(#Ax1), GG1, GG2);
   if not so then
-    return false, _, _, _;
+    return false, _, _;
   end if;
-  homg := hom<G1 -> G2 | [<g,((g@act1)^perm)@@act2> : g in Generators(G1) join {G1!1}]>;
-  assert forall{<i,g> : i in Ax1, g in Generators(G1) | Image(g,Ax1,i)^perm eq Image(g@homg, Ax2, i^perm)};
+  homg := hom<Miy1 -> Miy2 | [<g,((g@act1)^perm)@@act2> : g in Generators(Miy1) join {Miy1!1}]>;
+  assert forall{<i,g> : i in Ax1, g in Generators(Miy1) | Image(g,Ax1,i)^perm eq Image(g@homg, Ax2, i^perm)};
   
   // We form the tau map for the conjugated Ax1
-  tau_adj := map<Ax2 -> G2 | i:->(i^(perm^-1))@tau1@homg>;
+  tau_adj := map<Ax2 -> Group(Ax2) | i:->(i^(perm^-1))@tau1@homg>;
   
   // Find the equivalence between the tau maps
-  GAx2 := Stabiliser(Sym(#Ax2), Set(Orbits(G2, Ax2)));
+  GAx2 := Stabiliser(Sym(#Ax2), Set(Orbits(Miy2, Ax2)));
   N := Normaliser(GAx2, GG2);
 
   // We must define equality of maps
@@ -413,19 +459,19 @@ intrinsic IsIsomorphic(Ax1::GSet, tau1::Map, shape1::SeqEnum, Ax2::GSet, tau2::M
                         i:-> (((i^(n^-1))@tau_adj@act2)^n)@@act2>)};
   
   if not so then
-    return false, _, _, _;
+    return false, _, _;
   end if;
   
   perm := perm*n;
-  homg := hom<G1 -> G2 | [<g,((g@act1)^perm)@@act2> : g in Generators(G1) join {G1!1}]>;
-  assert MapEq(tau2, map<Ax2 -> G2 | i:->(i^(perm^-1))@tau1@homg>);
+  homg := hom<Miy1 -> Miy2 | [<g,((g@act1)^perm)@@act2> : g in Generators(Miy1) join {Miy1!1}]>;
+  assert MapEq(tau2, map<Ax2 -> Group(Ax2) | i:->(i^(perm^-1))@tau1@homg>);
   
   // Now we check to see if the shapes are the same
   
   // we can act with all the stabiliser of the tau-map
-  stab := sub<N |{m : m in N | MapEq(tau2, map<Ax2 -> G2 |
+  stab := sub<N |{m : m in N | MapEq(tau2, map<Ax2 -> Group(Ax2) |
                         i:-> (((i^(m^-1))@tau2@act2)^m)@@act2>)}>;
-  shape_orbs2 := [ Orbit(G2, Ax2, sh[1]) : sh in shape2 ];
+  shape_orbs2 := [ Orbit(Miy2, Ax2, sh[1]) : sh in shape2 ];
   
   orbmember := function(S);
     assert exists(i){i : i in [1..#shape_orbs2] | S in shape_orbs2[i]};
@@ -434,38 +480,76 @@ intrinsic IsIsomorphic(Ax1::GSet, tau1::Map, shape1::SeqEnum, Ax2::GSet, tau2::M
   
   so := exists(h){h : h in stab | forall{sh : sh in shape1 | sh[2] eq shape2[orbmember(sh[1]^(perm*h)), 2] }};
   if not so then
-    return false, _, _, _;
+    return false, _, _;
   end if;
   
   perm := perm*h;
-  homg := hom<G1 -> G2 | [<g,((g@act1)^perm)@@act2> : g in Generators(G1) join {G1!1}]>;
-  assert MapEq(tau2, map<Ax2 -> G2 | i:->(i^(perm^-1))@tau1@homg>);
+  homg := hom<Miy1 -> Miy2 | [<g,((g@act1)^perm)@@act2> : g in Generators(Miy1) join {Miy1!1}]>;
+  assert MapEq(tau2, map<Ax2 -> Group(Ax2) | i:->(i^(perm^-1))@tau1@homg>);
     
   return true, perm, homg;
+end intrinsic;
+/*
+
+Find the stabiliser of a shape
+
+*/
+intrinsic ShapeStabiliser(Ax::GSet, tau::Map, shape::SeqEnum) -> GrpPerm, Map
+  {
+  Find the stabiliser of the shape.
+  }
+  G := Group(Ax);
+  phi, GG := Action(G, Ax);
+  Taus := TauAction(Ax, {@ tau @});
+  N := Group(Taus);
+
+  if N eq GG then
+    return G, hom<G->G | GeneratorsSequence(G)>;
+  end if;
+  
+  Axnew := GSet(N);
+  
+  // We find the orbits of the shapes and group them by type
+  types := {@ sh[2] : sh in shape @};
+  
+  shape_orbs := [ &join[ Orbit(G, Ax, sh[1]) : sh in shape | sh[2] eq type ]: type in types];
+  
+  // For some reason we can't just take stabilisers of orbits of pairs, or triples etc.
+  // We must define a new GSet
+  
+  num_orbs := [ &join[ Orbit(G, Ax, sh[1]) : sh in shape | StringToInteger(sh[2,1]) eq i ]: i in [2..6]];
+  
+  numAx := AssociativeArray([* <i+1, GSet(N, Axnew, num_orbs[i])> : i in [1..5] | not IsEmpty(num_orbs[i])*]);
+  
+  stab := N;
+  for sh in shape_orbs do
+    stab := Stabiliser(stab, numAx[#sh[1]], sh);
+  end for;
+  
+  return stab, phi;
 end intrinsic;
 /*
 
 Function to return the restriction of the shape to the set of axes given by axes
 
 */
-intrinsic RestrictShape(Ax::GSet, tau::Map, shape::SeqEnum, K::GrpPerm, axes::SetIndx) -> SeqEnum, SeqEnum
+intrinsic RestrictShape(Ax::GSet, tau::Map, shape::SeqEnum, axes::SetIndx : K := sub<Group(Ax) | [i@tau : i in axes]>) -> SeqEnum, SeqEnum
   {
   Given a shape type defined by Ax, tau and shape, and a set of axes acted upon by K, calculate the restriction of the shape to the set of axes.  Returns the type and the sequence of types seen from the original shape.
   }
   G := Group(Ax);
-  require K subset G: "K must act in Ax.";
+  require K subset sub<Group(Ax) | [i@tau : i in axes]>: "K must be a subgroup of the Miyamoto group.";
   
   full_type := [];  // records the full shape information
   type_flag := [ false : sh in shape];  // records the index of which types were seen
 
   Sort(~axes);
   
-  defining_shape_reps := FindShapeConnectedComponents(Ax, tau, K, axes);
+  defining_shape_reps := FindShapeConnectedComponents(Ax, tau, axes: K := K);
   // We must identify the shape in the larger algebra for each connected component.  The components from the larger algebra may split, but they cannot join.
   
   for rep in defining_shape_reps do
     for o in rep do
-    
       // We only need to record the subalgebras which are define a connected component, not those which are contained in others.
       // If the size of the largest subalgebra is 6, we need to record 4s and 6s
       // Otherwise, we just need to record the ones with size equal to the largest.
@@ -524,7 +608,7 @@ intrinsic MaximalGluingSubalgebras(L::List: field := Rationals(), gluing := fals
   return MaximalGluingSubalgebras(L[1], L[2], L[3]:field := field, gluing := gluing, partial := partial);
 end intrinsic;
 
-intrinsic MaximalGluingSubalgebras(Ax::GSet, tau::Map, shape::SeqEnum: field := Rationals(), gluing := false, partial := false) -> List, SeqEnum
+intrinsic MaximalGluingSubalgebras(Ax::GSet, tau::Map, shape::SeqEnum: field := Rationals(), FT := MonsterFusionTable(), gluing := false, partial := false) -> List, SeqEnum
   {
   This routine has two functions:
 
@@ -534,18 +618,18 @@ intrinsic MaximalGluingSubalgebras(Ax::GSet, tau::Map, shape::SeqEnum: field := 
   
   The function also returns a set of flags showing which shapes have been covered by the subalgebras.
   }
-  G := Group(Ax);
-  maxes := [G] cat [ rec`subgroup : rec in MaximalSubgroups(G)];
+  Miy := sub<Group(Ax)| Image(tau)>;
+  maxes := [Miy] cat [ rec`subgroup : rec in MaximalSubgroups(Miy)];
   
   maxsubalgs := [* *];
   
   shape_flags := [ false : sh in shape ];
   
   for max in maxes do
-    orbs := [ o : o in Orbits(max, Ax) | sub<G | o@tau> subset max];
+    orbs := [ o : o in Orbits(max, Ax) | sub<Miy | o@tau> subset max];
     subsets := [ S : S in Subsets({1..#orbs}) | S ne {}];
     Sort(~subsets, func<x,y|#y-#x>);
-    if max eq G then
+    if max eq Miy then
       Remove(~subsets, 1);
     end if;
         
@@ -557,7 +641,7 @@ intrinsic MaximalGluingSubalgebras(Ax::GSet, tau::Map, shape::SeqEnum: field := 
       set := subsets[1];
       axes := &join orbs[Setseq(set)];
       Sort(~axes);
-      K := sub<G | FewGenerators(sub<G | axes@tau>)>;
+      K := sub<Miy | FewGenerators(sub<Miy | axes@tau>)>;
       
       num := IndexedSet([1..#axes]);
       numxK := CartesianProduct(num, K);
@@ -581,7 +665,7 @@ intrinsic MaximalGluingSubalgebras(Ax::GSet, tau::Map, shape::SeqEnum: field := 
         continue;
       end if;
       
-      Kshape, flags := RestrictShape(Ax, tau, shape, K, axes);
+      Kshape, flags := RestrictShape(Ax, tau, shape, axes: K := K);
       Kshape := [ <{@ Position(axes, i) : i in t[1] @}, t[2]> : t in Kshape ];
       
       if not gluing then
@@ -596,7 +680,7 @@ intrinsic MaximalGluingSubalgebras(Ax::GSet, tau::Map, shape::SeqEnum: field := 
         num_axes := &cat [ Sprintf("%o+", #o) : o in orbs[Setseq(set)]];
         num_axes := num_axes[1..#num_axes-1];
         
-        path := Sprintf("library/%m/%o/%o", field, MyGroupName(K_faithful), num_axes);
+        path := Sprintf("%o/%o/%m/%o/%o", library_location, FT`directory, field, MyGroupName(K_faithful), num_axes);
         if not ExistsPath(path) then
           Remove(~subsets, 1);
           continue;
@@ -626,7 +710,7 @@ intrinsic MaximalGluingSubalgebras(Ax::GSet, tau::Map, shape::SeqEnum: field := 
           alg_type := GetTypePartialAxialAlgebra(Sprintf("%o/%o", path, algs[j]));
           _, alg_ax, alg_tau, alg_shape, dim := Explode(alg_type);
           
-          so, perm, homg, _ := IsIsomorphic(Kx_faithful, Ktau_faithful, Kshape, alg_ax, alg_tau, alg_shape);
+          so, perm, homg := IsIsomorphic(Kx_faithful, Ktau_faithful, Kshape, alg_ax, alg_tau, alg_shape);
           index +:= 1;
         end while;
         
@@ -653,7 +737,7 @@ intrinsic MaximalGluingSubalgebras(Ax::GSet, tau::Map, shape::SeqEnum: field := 
   return maxsubalgs, shape_flags;
 end intrinsic;
 
-intrinsic GluingSubalgebras(Ax::GSet, tau::Map, shape::SeqEnum: field := Rationals(), gluing := true, partial := false, subgroups := Subgroups(Group(Ax))) -> List, SeqEnum
+intrinsic GluingSubalgebras(Ax::GSet, tau::Map, shape::SeqEnum: field := Rationals(), FT := MonsterFusionTable(), gluing := true, partial := false, subgroups := [ H`subgroup : H in Subgroups(sub<Group(Ax)| Image(tau)>)]) -> List, SeqEnum
   {
   This routine has two functions:
 
@@ -663,8 +747,8 @@ intrinsic GluingSubalgebras(Ax::GSet, tau::Map, shape::SeqEnum: field := Rationa
   
   The function also returns a set of flags showing which shapes have been covered by the subalgebras.
   }
-  G := Group(Ax);
-  subgroups := [ H`subgroup : H in subgroups];
+  Miy := sub<Group(Ax)| Image(tau)>;
+  require forall{ H : H in subgroups | H subset Miy}: "The subgroups given are not contained in the Miyamoto group.";
   subalgs := [* *];
   to_glue := {@ @}; // set of axes to have a subalgebra glued into.
   
@@ -678,11 +762,11 @@ intrinsic GluingSubalgebras(Ax::GSet, tau::Map, shape::SeqEnum: field := Rationa
   
   for i in Reverse([1..#subgroups]) do
     H := subgroups[i];
-    orbs := [ o : o in Orbits(H, Ax) | sub<G | o@tau> subset H];
+    orbs := [ o : o in Orbits(H, Ax) | sub<Miy | o@tau> subset H];
     subsets := [ S : S in Subsets({1..#orbs}) | S ne {}];
     RemoveSubsets(~subsets, orbs, to_glue);
     Sort(~subsets, func<x,y|#y-#x>);
-    if H eq G then
+    if H eq Miy then
       Remove(~subsets, 1);
     end if;
         
@@ -694,7 +778,7 @@ intrinsic GluingSubalgebras(Ax::GSet, tau::Map, shape::SeqEnum: field := Rationa
       set := subsets[1];
       axes := &join orbs[Setseq(set)];
       Sort(~axes);
-      K := sub<G | FewGenerators(sub<G | axes@tau>)>;
+      K := sub<Miy | FewGenerators(sub<Miy | axes@tau>)>;
       
       // check whether we have already 
       
@@ -722,7 +806,7 @@ intrinsic GluingSubalgebras(Ax::GSet, tau::Map, shape::SeqEnum: field := Rationa
       
       if not gluing then
         // We find the GSet, tau and shape for the maximal elements
-        Kshape, flags := RestrictShape(Ax, tau, shape, K, axes);
+        Kshape, flags := RestrictShape(Ax, tau, shape, axes: K := K);
         Kshape := [ <{@ Position(axes, i) : i in t[1] @}, t[2]> : t in Kshape ];
         subsets := [ S : S in subsets |  not S subset set ];
         Append(~subalgs, [*Kx_faithful, Ktau_faithful, Kshape*]);
@@ -733,10 +817,9 @@ intrinsic GluingSubalgebras(Ax::GSet, tau::Map, shape::SeqEnum: field := Rationa
         continue;
       else
         // We wish to search for any subalgebras and check whether we have completed them
-        num_axes := &cat [ Sprintf("%o+", #o) : o in orbs[Setseq(set)]];
-        num_axes := num_axes[1..#num_axes-1];
+        num_axes := Join([ IntegerToString(#o) : o in orbs[Setseq(set)]], "+");
         
-        path := Sprintf("library/%m/%o/%o", field, MyGroupName(K_faithful), num_axes);
+        path := Sprintf("%o/%o/%m/%o/%o", library_location, FT`directory, field, MyGroupName(K_faithful), num_axes);
         if not ExistsPath(path) then
           Remove(~subsets, 1);
           continue;
@@ -749,7 +832,7 @@ intrinsic GluingSubalgebras(Ax::GSet, tau::Map, shape::SeqEnum: field := Rationa
         end if;
         
         // We search for possible isomorphic algebras by checking the shape
-        Kshape, flags := RestrictShape(Ax, tau, shape, K, axes);
+        Kshape, flags := RestrictShape(Ax, tau, shape, axes: K := K);
         Kshape := [ <{@ Position(axes, i) : i in t[1] @}, t[2]> : t in Kshape ];
         
         alg_shapes := [ ParseShape(sh) : sh in algs];
@@ -769,7 +852,7 @@ intrinsic GluingSubalgebras(Ax::GSet, tau::Map, shape::SeqEnum: field := Rationa
           alg_type := GetTypePartialAxialAlgebra(Sprintf("%o/%o", path, algs[j]));
           _, alg_ax, alg_tau, alg_shape, dim := Explode(alg_type);
           
-          so, perm, homg, _ := IsIsomorphic(Kx_faithful, Ktau_faithful, Kshape, alg_ax, alg_tau, alg_shape);
+          so, perm, homg := IsIsomorphic(Kx_faithful, Ktau_faithful, Kshape, alg_ax, alg_tau, alg_shape);
           index +:= 1;
         end while;
         
@@ -785,6 +868,7 @@ intrinsic GluingSubalgebras(Ax::GSet, tau::Map, shape::SeqEnum: field := Rationa
         
         // If the dimension is zero, it collapses the algebra and we return just this
         if dim eq 0 then
+          vprintf ParAxlAlg, 4: "Found a 0-dim algebra to glue in on the axes %o with group %o.\n", axes, GroupName(K_faithful);
           return [*<Sprintf("%o/%o", path, algs[j]), map, phi*homg>*], shape_flags;
         end if;
         

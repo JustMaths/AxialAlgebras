@@ -44,7 +44,7 @@ end intrinsic;
 Build an initial partial algebra
 
 */
-intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_table := MonsterFusionTable(), subalgebras:="maximal", partial := false, field:= QQ, subgroups := subalgebras eq "all" select Subgroups(Group(Ax)) else []) -> ParAxlAlg
+intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_table := MonsterFusionTable(), subalgebras:="maximal", partial := false, field:= QQ, subgroups := subalgebras eq "all" select [ H`subgroup : H in Subgroups(sub<Group(Ax)| Image(tau)>)] else [], shape_stabiliser:=true) -> ParAxlAlg
   {
   Given a GSet Ax for a group G, a map tau: Ax -> involutions of G and a shape for the partial algebra, we define an initial object.  shape should be given as a sequence of tuples <o, type>, where the axes o[1] and o[2] generate a subalgebra of the given type with axes o.
   
@@ -57,6 +57,13 @@ intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_tab
   require IsField(field): "The field given is not a field!";
     
   A := New(ParAxlAlg);
+  
+  if shape_stabiliser then
+    G, phi := ShapeStabiliser(Ax, tau, shape);
+    Ax := GSet(G);
+    tau := tau*phi;
+  end if;
+    
   A`GSet := Ax;
   A`tau := tau;
   A`shape := shape;
@@ -66,8 +73,12 @@ intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_tab
   end if;
   A`fusion_table := fusion_table;
   G := Group(Ax);
+  A`group := G;
+  Miy := sub<G | Image(tau)>;
+  ReduceGenerators(~Miy);
+  A`Miyamoto_group := Miy;
 
-  A`Wmod := PermutationModule(G, Action(G, Ax), field); 
+  A`Wmod := PermutationModule(G, Action(G, Ax), field);
   A`W := RSpace(field, Dimension(A`Wmod));
   Wmod := A`Wmod;
   W := A`W;
@@ -104,10 +115,13 @@ intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_tab
         A`Wmod := GModule(G, MatrixAlgebra<field,0|[ZeroMatrix(field,0,0) : g in Generators(G)]>);
         A`W := RSpace(field, Dimension(A`Wmod));
         A`V := A`W;
-        A`GSet_to_axes := map<Ax -> A`W | i :-> W!0>;
+        A`GSet_to_axes := map<Ax -> A`W | i :-> A`W!0>;
         return A;
       end if;
-        
+      
+      // otherwise, we must reduce to the Miyamoto group
+      alg := RestrictToMiyamotoGroup(alg);
+      
       axes := Domain(glue);
       tau_images := [ i@tau : i in axes];
       H := sub<G | tau_images>;
@@ -148,11 +162,11 @@ intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_tab
     subsp := RSpaceWithBasis([ A`W.i : i in orb]);
     subalgs`subsps cat:= [* subsp *];
 
-    path := Sprintf("%o/%m/basic_algebras/%o", library_location, BaseField(A), type);
+    path := Sprintf("%o/%o/%m/basic_algebras/%o", library_location, fusion_table`directory, BaseRing(A), type);
     if ExistsPath(path) then
       alg := LoadPartialAxialAlgebra(path);
     else
-      alg := ChangeField(LoadPartialAxialAlgebra(Sprintf("%o/RationalField()/basic_algebras/%o", library_location, type)), field);
+      alg := ChangeField(LoadPartialAxialAlgebra(Sprintf("%o/%o/RationalField()/basic_algebras/%o", library_location, fusion_table`directory, type)), field);
     end if;
     if alg in subalgs`algs then
       pos := Position(subalgs`algs, alg);
@@ -196,8 +210,8 @@ intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_tab
   A`subalgs := subalgs;
   A`V := sub<A`W|>;
   
-  inv_classes := Sort({@ Representative(o) : o in Orbits(G, Ax) @});
-  A`axes := [AssignAxis(A, Ax, tau, i) : i in inv_classes];
+  axis_classes := Sort({@ Representative(o) : o in Orbits(G, Ax) @});
+  A`axes := [AssignAxis(A, Ax, tau, i) : i in axis_classes];
 
   A`mult := [];
   A`rels := {@ @};
@@ -239,7 +253,7 @@ intrinsic AssignAxis(A::ParAxlAlg, Ax::GSet, tau::Map, a::RngIntElt) -> Axis
   assert a@tau in Centre(H);
   idem`inv := a@tau;
 
-  Ggr, gr := Grading(A`fusion_table); 
+  Ggr, gr := Grading(A`fusion_table);
   require Order(Ggr) in {1,2}: "The fusion table is not Z_2-graded.";
 
   idem`odd := AssociativeArray();
@@ -328,7 +342,7 @@ end intrinsic;
 Internal function for updating the axes.
 
 */
-intrinsic UpdateAxes(A::ParAxlAlg, ~Anew::ParAxlAlg, psi::Map: matrix := Matrix(BaseField(A), Dimension(A), Dimension(Anew), [u@psi : u in Basis(A`W)]))
+intrinsic UpdateAxes(A::ParAxlAlg, ~Anew::ParAxlAlg, psi::Map: matrix := Matrix(BaseRing(A), Dimension(A), Dimension(Anew), [u@psi : u in Basis(A`W)]))
   {
   If psi is a map from the subspace for A to the subspace for Anew, then build the axes for Anew from those of A.  NB we require psi to be a G-invariant map (although it is given as a map on the subspaces).  Takes an optional argument of the matrix of psi.
   }

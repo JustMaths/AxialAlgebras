@@ -25,9 +25,9 @@ function PrintSort(x,y)
   end if;
 end function;
 
-intrinsic PrintProperties(algs::SeqEnum, filename::MonStgElt: long := false, header := true, shortshape:=true)
+intrinsic PrintProperties(algs::SeqEnum, filename::MonStgElt: long := false, header := true, shortshape:=true, zerodim:=true)
   {
-  Prints in latex format to the filename the properties of the algebras in algs.  Short version is G, axes, shape, dim, m, form.  Long adds positive def/semidef, primitive, 2Ab, 3A, 4A, 5A
+  Prints in latex format to the filename the properties of the algebras in algs.  Short version is G, axes, shape, dim, m, form.  Long adds positive def/semidef, primitive, 2Ab, 3A, 4A, 5A.  zerodim toggles if the 0-dimensional algebras are printed.
   }
   its := func< x | IntegerToString(x)>;
   BoolToYN := func< v | v select "yes" else "no">;
@@ -35,6 +35,11 @@ intrinsic PrintProperties(algs::SeqEnum, filename::MonStgElt: long := false, hea
   str := [];  
   for i in [1..#algs] do
     A := algs[i];
+    
+    // If not zerodim then we don't print the 0-dim algebras
+    if not zerodim and Dimension(A) eq 0 then
+      continue;
+    end if;
     
     num_axes := &cat [ Sprintf("%o+", #o) : o in Orbits(Group(A`GSet), A`GSet)];
     num_axes := num_axes[1..#num_axes-1];
@@ -79,9 +84,12 @@ intrinsic PrintProperties(algs::SeqEnum, filename::MonStgElt: long := false, hea
     Append(~str, line);
   end for;
   
-  Sort(~str, PrintSort);
-  
-  text := Join([ Join(line, " & ") : line in str], "\\\\\n");
+  if #str ne 0 then
+    Sort(~str, PrintSort);
+    text := Join([ Join(line, " & ") : line in str], "\\\\\n");
+  else
+    text := "";
+  end if;
   
   if header then
     if not long then
@@ -163,12 +171,17 @@ intrinsic Properties(A::ParAxlAlg) -> List
   so, F, m := HasFrobeniusForm(A);
   
   if so then
-    pos := IsPositiveDefinite(F);
-    if not pos then
-      semipos := IsPositiveSemiDefinite(F);
-    else
-      semipos := pos;
-    end if;
+    try
+      pos := IsPositiveDefinite(F);
+      if not pos then
+        semipos := IsPositiveSemiDefinite(F);
+      else
+        semipos := pos;
+      end if;
+    catch e
+      pos := false;
+      semipos := false;
+    end try;
   else
     pos := so;
     semipos := pos;
