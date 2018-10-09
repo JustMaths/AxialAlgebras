@@ -28,7 +28,7 @@ Now, we want to find what addmissible tau maps there are
 
     taus := AdmissibleTauMaps(Ax);
 
-This produces a sequence of tuples `<tau, stab>` where tau is a tau map and stab is its stabiliser in the Normaliser of the action.  Let's pick one and find some shapes:
+This produces a sequence of tuples `<tau, stab>` where tau is a tau map and stab is its stabiliser in the normaliser of the action.  Let's pick one and find some shapes:
 
     tau, stab := Explode(taus[1]);
     shapes := Shapes(Ax, tau, stab);
