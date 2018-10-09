@@ -68,6 +68,8 @@ intrinsic ChangeField(T::FusTab, F::Fld, f::Map) -> FusTab
   Note that we need to be able to coerce any scalars into the new field.  For example, the rationals to a finite field is ok, but not the other way.
  }
   Tnew := New(FusTab);
+  Tnew`name := T`name;
+  Tnew`directory := T`directory;
   Tnew`eigenvalues := T`eigenvalues@f;
   require #Tnew`eigenvalues eq #T`eigenvalues: "Changing field collapses some eigenvalues.";
   

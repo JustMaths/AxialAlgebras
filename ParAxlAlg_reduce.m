@@ -122,7 +122,7 @@ end intrinsic;
 U is a subspace which we want to mod out by.  Therefore we may also mod out by v*u for any u in U and v in V.  We grow the subspace U by doing this.
 
 */
-intrinsic SaturateSubspace(A::ParAxlAlg, U::ModTupFld: starting := sub<A`W|>) -> ModTupFld
+intrinsic SaturateSubspace(A::ParAxlAlg, U::ModTupRng: starting := sub<A`W|>) -> ModTupRng
   {
   Add products of U \cap V with V to U until it saturates, also using the action of G.  Has an optional argument of a starting subspace which we assume to be saturated.
   }

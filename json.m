@@ -196,7 +196,6 @@ intrinsic JSON(x::AlgMatElt : nl:="\n") -> MonStgElt
     return "[ ]";
   end if;
   B := BaseRing(x);
-  // require IsField(B) select IsPrimeField(B) else B eq ZZ : "Base ring of matrix must be ZZ, QQ, or GF(p) in JSON";
   rs := [Eltseq(r):r in Rows(x)];
   if (IsField(B) and IsPrimeField(B)) or B cmpeq ZZ then
     strs := [[x in ZZ select IntegerToString(ZZ!x) else Sprintf("\"%o\"",x):x in r]:r in rs];
@@ -211,7 +210,6 @@ intrinsic JSON(x::AlgMatElt : nl:="\n") -> MonStgElt
             <"rows", NumberOfRows(x)>,
             <"columns", NumberOfColumns(x)>,
             <"values", vals >*];
-    // [* <i,Eltseq(vals[i])> : i in [1..#vals]*]>*];
     return JSON(mat: nl:=nl);
   end if;
 end intrinsic;
