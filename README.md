@@ -2,7 +2,7 @@
 
 This is a magma package for constructing axial algebra with a given Miyamoto group.  It implements the algorithm described in the paper "An expansion algorithm for constructing axial algebras" (https://arxiv.org/abs/1804.00587) by J. McInroy and S. Shpectorov.
 
-##Getting started
+## Getting started
 
 Begin by cloning the repository by running
 
@@ -18,7 +18,7 @@ Now, when you are in the AxialAlgebras directory start magma and attach the spec
     
 NB some of the commands will use python 2.7.
 
-##Find some shapes
+## Find some shapes
 
 To construct an axial algebra with a given Miyamoto group `G`, we need to begin with an action of a permutation group `G` on some putative axes.
 
