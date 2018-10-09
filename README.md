@@ -32,3 +32,5 @@ This produces a sequence of tuples `<tau, stab>` where tau is a tau map and stab
 
     tau, stab := Explode(taus[1]);
     shapes := Shapes(Ax, tau, stab);
+    
+`shapes` is now a sequence of all the possible shapes for the action `Ax` and tau map `tau` up to the action of `stab`.
