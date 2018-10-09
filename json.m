@@ -190,7 +190,7 @@ end intrinsic;
 
 intrinsic JSON(x::AlgMatElt : nl:="\n") -> MonStgElt
   {
-  Serialise a matrix (over ZZ, QQ, or GF(p)) as an array of arrays.
+  Serialise a matrix over QQ, GF(p), or ZZ as an array of arrays, or over a function field, or a polynomial ring in one variable, a class with ring, number of rows, number of columns and a sequence of values.
   }
   if NumberOfRows(x) eq 0 and NumberOfColumns(x) eq 0 then
     return "[ ]";
@@ -207,7 +207,7 @@ intrinsic JSON(x::AlgMatElt : nl:="\n") -> MonStgElt
   else
     vals := Eltseq(x);
     mat := [* <"class", "Matrix">,
-            <"field", Sprintf("%m", BaseRing(x))>,
+            <"ring", Sprintf("%m", BaseRing(x))>,
             <"rows", NumberOfRows(x)>,
             <"columns", NumberOfColumns(x)>,
             <"values", vals >*];
@@ -218,10 +218,10 @@ end intrinsic;
 
 intrinsic JSON(M::MtrxSprs : nl:="\n") -> MonStgElt
   {
-  Serialise a sparse matrix (over ZZ, QQ, or GF(p)) as a class with field, number of rows, number of columns and a list of [r,c,v].
+  Serialise a sparse matrix (over QQ, GF(p), a function field, ZZ, or a polynomial ring in one variable) as a class with ring, number of rows, number of columns and a list of [r,c,v].
   }
   mat := [* <"class", "Sparse Matrix">,
-            <"field", Sprintf("%m", BaseRing(M))>,
+            <"ring", Sprintf("%m", BaseRing(M))>,
             <"rows", NumberOfRows(M)>,
             <"columns", NumberOfColumns(M)>,
             <"values", [* [* t[1], t[2], t[3] *] : t in Eltseq(M)*]>*];
@@ -243,7 +243,11 @@ intrinsic Numbers(x::Any) -> Any
   Try to turn x into a rational or nested sequence of rationals.
   }
   if Type(x) eq List then
+    // it is a nested sequence
     return [Numbers(y):y in x];
+  elif Type(x) eq Assoc and x["class"] eq "Sparse Matrix" and x["rows"] eq 1 then
+    // it is a vector in sparse form
+    return Eltseq(SparseMatrix(eval(x["ring"]), x)[1]);
   elif Type(x) eq MonStgElt and Regexp("^0|-?[1-9][0-9]*(/[1-9][0-9]*)?$", x) then
     x := StringToRational(x);
     return x in ZZ select ZZ!x else x;
@@ -293,22 +297,26 @@ intrinsic Num(x::Any) -> FldRatElt
   end if;
 end intrinsic;
 
-intrinsic Matrix(R::Rng, M::List) -> Any
+intrinsic Matrix(R::Rng, M::List) -> Mtrx
   {
   Convert a JSONised matrix into a matrix over R.
   }
   return Matrix(R, [[R!Numbers(x):x in r]:r in M]);
 end intrinsic;
 
-intrinsic Matrix(R::Rng, M::Assoc) -> Any
+intrinsic Matrix(R::Rng, M::Assoc) -> Mtrx
   {
   Convert a JSONised matrix into a matrix over R.
   }
   keys := Keys(M);
-  require "class" in keys and M["class"] eq "Matrix": "The file given does not encode a matrix.";
-  require keys eq {"class", "field", "rows", "columns", "values"}: "Invalid JSON format for a matrix";
+  require "class" in keys and M["class"] in {"Matrix", "Sparse Matrix"}: "The file given does not encode a matrix.";
+  if M["class"] eq "Sparse Matrix" then
+    return Matrix(SparseMatrix(R, M));
+  end if;
   
-  F := eval(M["field"]);
+  require keys eq {"class", "ring", "rows", "columns", "values"}: "Invalid JSON format for a matrix";
+  
+  F := eval(M["ring"]);
   assert R eq F;
   n := Numbers(M["rows"]);
   m := Numbers(M["columns"]);
@@ -316,22 +324,21 @@ intrinsic Matrix(R::Rng, M::Assoc) -> Any
   return Matrix(F, n, m, [ F!Numbers(v) : v in M["values"]]);
 end intrinsic;
 
-intrinsic SparseMatrix(R::Rng, M::Assoc) -> Any
+intrinsic SparseMatrix(R::Rng, M::Assoc) -> MtrxSprs
   {
   Convert a JSONised sparse matrix into a sparse matrix over R.
   }
   keys := Keys(M);
   require "class" in keys and M["class"] eq "Sparse Matrix": "The file given does not encode a sparse matrix.";
-  require keys eq {"class", "field", "rows", "columns", "values"}: "Invalid JSON format for a sparse matrix";
+  require keys eq {"class", "ring", "rows", "columns", "values"}: "Invalid JSON format for a sparse matrix";
   
-  F := eval(M["field"]);
+  F := eval(M["ring"]);
   assert R eq F;
   n := Numbers(M["rows"]);
   m := Numbers(M["columns"]);
   
   return SparseMatrix(F, n, m, [ <x[1], x[2], Numbers(x[3])> : x in M["values"]]);
 end intrinsic;
-
 /*
 Deserialisation
 

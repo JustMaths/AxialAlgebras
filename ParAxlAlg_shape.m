@@ -410,10 +410,12 @@ end intrinsic;
 
 Checks isomorphism of shapes.
 
+NB this will automoatically restrict to an automorphism of the Miyamoto groups.
+
 */
 intrinsic IsIsomorphic(Ax1::GSet, tau1::Map, shape1::SeqEnum, Ax2::GSet, tau2::Map, shape2::SeqEnum) -> BoolElt, GrpPermElt, Map
   {
-  Tests if the shape defined by Ax1, tau1, and shape1 is isomorphic to the one defined by Ax2, tau2, shape2.  If so, it returns a pair, perm in Sym(|Ax1|) and homg:G1->G2 such that
+  Tests if the shape defined by Ax1, tau1, and shape1 is isomorphic to the one defined by Ax2, tau2, shape2.  If so, it returns a pair, perm in Sym(|Ax1|) and homg:Miy1->Miy2 such that
   
   (i^g)^perm = (i^perm)^(g@homg) for all g in G1.
   
@@ -422,26 +424,26 @@ intrinsic IsIsomorphic(Ax1::GSet, tau1::Map, shape1::SeqEnum, Ax2::GSet, tau2::M
   and perm maps shape1 to shape2.
   }
   if #Ax1 ne #Ax2 then
-    return false, _, _, _;
+    return false, _, _;
   end if;
   
   // Find the equivalence between the GSets
-  G1 := Group(Ax1);
-  G2 := Group(Ax2);
-  act1, GG1 := Action(G1, Ax1);
-  act2, GG2 := Action(G2, Ax2);
+  Miy1 := sub<Group(Ax1) | Image(tau1)>;
+  Miy2 := sub<Group(Ax2) | Image(tau2)>;
+  act1, GG1 := Action(Miy1, Ax1);
+  act2, GG2 := Action(Miy2, Ax2);
   so, perm := IsConjugate(Sym(#Ax1), GG1, GG2);
   if not so then
-    return false, _, _, _;
+    return false, _, _;
   end if;
-  homg := hom<G1 -> G2 | [<g,((g@act1)^perm)@@act2> : g in Generators(G1) join {G1!1}]>;
-  assert forall{<i,g> : i in Ax1, g in Generators(G1) | Image(g,Ax1,i)^perm eq Image(g@homg, Ax2, i^perm)};
+  homg := hom<Miy1 -> Miy2 | [<g,((g@act1)^perm)@@act2> : g in Generators(Miy1) join {Miy1!1}]>;
+  assert forall{<i,g> : i in Ax1, g in Generators(Miy1) | Image(g,Ax1,i)^perm eq Image(g@homg, Ax2, i^perm)};
   
   // We form the tau map for the conjugated Ax1
-  tau_adj := map<Ax2 -> G2 | i:->(i^(perm^-1))@tau1@homg>;
+  tau_adj := map<Ax2 -> Group(Ax2) | i:->(i^(perm^-1))@tau1@homg>;
   
   // Find the equivalence between the tau maps
-  GAx2 := Stabiliser(Sym(#Ax2), Set(Orbits(G2, Ax2)));
+  GAx2 := Stabiliser(Sym(#Ax2), Set(Orbits(Miy2, Ax2)));
   N := Normaliser(GAx2, GG2);
 
   // We must define equality of maps
@@ -457,19 +459,19 @@ intrinsic IsIsomorphic(Ax1::GSet, tau1::Map, shape1::SeqEnum, Ax2::GSet, tau2::M
                         i:-> (((i^(n^-1))@tau_adj@act2)^n)@@act2>)};
   
   if not so then
-    return false, _, _, _;
+    return false, _, _;
   end if;
   
   perm := perm*n;
-  homg := hom<G1 -> G2 | [<g,((g@act1)^perm)@@act2> : g in Generators(G1) join {G1!1}]>;
-  assert MapEq(tau2, map<Ax2 -> G2 | i:->(i^(perm^-1))@tau1@homg>);
+  homg := hom<Miy1 -> Miy2 | [<g,((g@act1)^perm)@@act2> : g in Generators(Miy1) join {Miy1!1}]>;
+  assert MapEq(tau2, map<Ax2 -> Group(Ax2) | i:->(i^(perm^-1))@tau1@homg>);
   
   // Now we check to see if the shapes are the same
   
   // we can act with all the stabiliser of the tau-map
-  stab := sub<N |{m : m in N | MapEq(tau2, map<Ax2 -> G2 |
+  stab := sub<N |{m : m in N | MapEq(tau2, map<Ax2 -> Group(Ax2) |
                         i:-> (((i^(m^-1))@tau2@act2)^m)@@act2>)}>;
-  shape_orbs2 := [ Orbit(G2, Ax2, sh[1]) : sh in shape2 ];
+  shape_orbs2 := [ Orbit(Miy2, Ax2, sh[1]) : sh in shape2 ];
   
   orbmember := function(S);
     assert exists(i){i : i in [1..#shape_orbs2] | S in shape_orbs2[i]};
@@ -478,12 +480,12 @@ intrinsic IsIsomorphic(Ax1::GSet, tau1::Map, shape1::SeqEnum, Ax2::GSet, tau2::M
   
   so := exists(h){h : h in stab | forall{sh : sh in shape1 | sh[2] eq shape2[orbmember(sh[1]^(perm*h)), 2] }};
   if not so then
-    return false, _, _, _;
+    return false, _, _;
   end if;
   
   perm := perm*h;
-  homg := hom<G1 -> G2 | [<g,((g@act1)^perm)@@act2> : g in Generators(G1) join {G1!1}]>;
-  assert MapEq(tau2, map<Ax2 -> G2 | i:->(i^(perm^-1))@tau1@homg>);
+  homg := hom<Miy1 -> Miy2 | [<g,((g@act1)^perm)@@act2> : g in Generators(Miy1) join {Miy1!1}]>;
+  assert MapEq(tau2, map<Ax2 -> Group(Ax2) | i:->(i^(perm^-1))@tau1@homg>);
     
   return true, perm, homg;
 end intrinsic;
@@ -492,69 +494,40 @@ end intrinsic;
 Find the stabiliser of a shape
 
 */
-/*
-intrinsic ShapeStabiliser(Ax::GSet, tau::Map, shape::SeqEnum) -> PermGrp
+intrinsic ShapeStabiliser(Ax::GSet, tau::Map, shape::SeqEnum) -> GrpPerm, Map
   {
-  Find the stabiliser of the shape in the Normaliser of the action
+  Find the stabiliser of the shape.
   }
-  // We find the automorphism group of the action of the Miyamoto group on the axes
-  Miy := sub<Group(Ax) | Image(tau)>;
-  ReduceGenerators(~Miy);
-  orbs := Orbits(Miy, Ax);
-  phi, GG := Action(Miy, Ax);
-  GAx := Stabiliser(Sym(#Ax), Set(orbs));
-  N := Normaliser(GAx, GG);
+  G := Group(Ax);
+  phi, GG := Action(G, Ax);
+  Taus := TauAction(Ax, {@ tau @});
+  N := Group(Taus);
+
+  if N eq GG then
+    return G, hom<G->G | GeneratorsSequence(G)>;
+  end if;
+  
+  Axnew := GSet(N);
   
   // We find the orbits of the shapes and group them by type
   types := {@ sh[2] : sh in shape @};
   
-  shape_orbs := [ &join[ Orbit(Miy, Ax, sh[1]) : sh in shape | sh[2] eq type ]: type in types];
+  shape_orbs := [ &join[ Orbit(G, Ax, sh[1]) : sh in shape | sh[2] eq type ]: type in types];
   
-  stab := 
-  while Miy 
+  // For some reason we can't just take stabilisers of orbits of pairs, or triples etc.
+  // We must define a new GSet
   
+  num_orbs := [ &join[ Orbit(G, Ax, sh[1]) : sh in shape | StringToInteger(sh[2,1]) eq i ]: i in [2..6]];
   
-  orb_reps := [Representative(o) : o in orbs];
+  numAx := AssociativeArray([* <i+1, GSet(N, Axnew, num_orbs[i])> : i in [1..5] | not IsEmpty(num_orbs[i])*]);
   
+  stab := N;
+  for sh in shape_orbs do
+    stab := Stabiliser(stab, numAx[#sh[1]], sh);
+  end for;
   
-  // We must define equality of maps
-  
-  MapEq := function(f,g)
-    return forall{i: i in orb_reps | i@f eq i@g};
-  end function;
-  
-  tau_return := function(f)
-    assert exists(g){g : g in tau_maps | MapEq(f,g)};
-    return g;
-  end function;
-  
-  // The action on tau maps is
-  // tau_n := tau(i^(n^-1))^n
-  
-  tausxN := CartesianProduct(tau_maps, N);
-  f := map< tausxN -> tau_maps | y :-> tau_return(map<Ax-> G | i:-> ((((i^(y[2]^-1))@y[1])@phi)^y[2])@@phi >) >;
-  Taus := GSet(N, tau_maps, f);
-
-  // We wish to get a deterministic algorithm, so we sort the tau-maps
-
-  Taus_orbs := [ Sort(o, TauSort) : o in Orbits(N, Taus)];
-  Taus_orb_reps := Sort([o[1] : o in Taus_orbs], TauSort);
-  
-  return [ <tau, Stabiliser(N, Taus, tau)> where tau := Taus_orb_reps[i]
-              : i in [1..#Taus_orb_reps]];
-
+  return stab, phi;
 end intrinsic;
-*/
-/*
-
-To use this:
-
-Create a new GSet using N
-
-Axnew := GSet(N);
-Wmodnew := PermutationModule(N, Action(N, Axnew), field);
-
-*/
 /*
 
 Function to return the restriction of the shape to the set of axes given by axes
@@ -737,7 +710,7 @@ intrinsic MaximalGluingSubalgebras(Ax::GSet, tau::Map, shape::SeqEnum: field := 
           alg_type := GetTypePartialAxialAlgebra(Sprintf("%o/%o", path, algs[j]));
           _, alg_ax, alg_tau, alg_shape, dim := Explode(alg_type);
           
-          so, perm, homg, _ := IsIsomorphic(Kx_faithful, Ktau_faithful, Kshape, alg_ax, alg_tau, alg_shape);
+          so, perm, homg := IsIsomorphic(Kx_faithful, Ktau_faithful, Kshape, alg_ax, alg_tau, alg_shape);
           index +:= 1;
         end while;
         
@@ -879,7 +852,7 @@ intrinsic GluingSubalgebras(Ax::GSet, tau::Map, shape::SeqEnum: field := Rationa
           alg_type := GetTypePartialAxialAlgebra(Sprintf("%o/%o", path, algs[j]));
           _, alg_ax, alg_tau, alg_shape, dim := Explode(alg_type);
           
-          so, perm, homg, _ := IsIsomorphic(Kx_faithful, Ktau_faithful, Kshape, alg_ax, alg_tau, alg_shape);
+          so, perm, homg := IsIsomorphic(Kx_faithful, Ktau_faithful, Kshape, alg_ax, alg_tau, alg_shape);
           index +:= 1;
         end while;
         

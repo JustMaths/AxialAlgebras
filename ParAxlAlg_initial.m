@@ -44,7 +44,7 @@ end intrinsic;
 Build an initial partial algebra
 
 */
-intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_table := MonsterFusionTable(), subalgebras:="maximal", partial := false, field:= QQ, subgroups := subalgebras eq "all" select [ H`subgroup : H in Subgroups(sub<Group(Ax)| Image(tau)>)] else []) -> ParAxlAlg
+intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_table := MonsterFusionTable(), subalgebras:="maximal", partial := false, field:= QQ, subgroups := subalgebras eq "all" select [ H`subgroup : H in Subgroups(sub<Group(Ax)| Image(tau)>)] else [], shape_stabiliser:=true) -> ParAxlAlg
   {
   Given a GSet Ax for a group G, a map tau: Ax -> involutions of G and a shape for the partial algebra, we define an initial object.  shape should be given as a sequence of tuples <o, type>, where the axes o[1] and o[2] generate a subalgebra of the given type with axes o.
   
@@ -57,6 +57,13 @@ intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_tab
   require IsField(field): "The field given is not a field!";
     
   A := New(ParAxlAlg);
+  
+  if shape_stabiliser then
+    G, phi := ShapeStabiliser(Ax, tau, shape);
+    Ax := GSet(G);
+    tau := tau*phi;
+  end if;
+    
   A`GSet := Ax;
   A`tau := tau;
   A`shape := shape;
@@ -111,7 +118,10 @@ intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_tab
         A`GSet_to_axes := map<Ax -> A`W | i :-> A`W!0>;
         return A;
       end if;
-        
+      
+      // otherwise, we must reduce to the Miyamoto group
+      alg := RestrictToMiyamotoGroup(alg);
+      
       axes := Domain(glue);
       tau_images := [ i@tau : i in axes];
       H := sub<G | tau_images>;

@@ -57,7 +57,7 @@ intrinsic Filename(Ax::GSet, tau::Map, shape::SeqEnum: field := Rationals(), FT 
   
   // first check to see if the directory exists at all
   
-  path := Sprintf("%o/%o/%m/%o/%o", library_location, FT`directory, field, MyGroupName(Group(Ax)), num_axes);
+  path := Sprintf("%o/%o/%m/%o/%o", library_location, FT`directory, field, MyGroupName(Miy), num_axes);
   if ExistsPath(path) then
     // we must now see if there is already an algebra with the same path with a different tau.
     algs := ls(path);
@@ -93,6 +93,7 @@ intrinsic Filename(A::ParAxlAlg) -> MonStgElt
   
   if the algebra has not been fully reduced, where i is an index allowing different tau maps.
   }
+  Miy := A`Miyamoto_group;
   shapetype := &cat [ sh[2] : sh in A`shape];
   num_axes := Join([ IntegerToString(#o) : o in Orbits(A`Miyamoto_group, A`GSet)], "+");
   
@@ -108,7 +109,7 @@ intrinsic Filename(A::ParAxlAlg) -> MonStgElt
   // first check to see if the directory exists at all
   
   
-  path := Sprintf("%o/%o/%m/%o/%o", library_location, A`fusion_table`directory, BaseRing(A), MyGroupName(Group(A)), num_axes);
+  path := Sprintf("%o/%o/%m/%o/%o", library_location, A`fusion_table`directory, BaseRing(A), MyGroupName(Miy), num_axes);
   if ExistsPath(path) then
     // we must now see if there is already an algebra with the same path with a different tau.
     algs := ls(path);
@@ -224,7 +225,7 @@ intrinsic SavePartialAxialAlgebra(A::ParAxlAlg: filename:=Filename(A))
   // To save larger algebras without hitting magma's limit on strings of 2^31bits we do each element in the list seperately
   L := [ J[2..#J-2] where J := JSON([*l*]) : l in ParAxlAlgToList(A) ];
   
-  System(Sprintf("rm -r %o", filename));
+  System(Sprintf("rm -fr '%o'", filename));
   maxlength := 8000;
   str := "{\n" cat L[1];
   for l in L[2..#L] do
@@ -247,25 +248,34 @@ end intrinsic;
 Code to serialise some types that will be useful
 
 */
-intrinsic JSON(x::ParAxlAlgElt : nl:="\n") -> MonStgElt
+intrinsic JSON(x::ParAxlAlgElt : nl:="\n", sparse_dim:=10) -> MonStgElt
   {
-  Serialise a partial axial algebra element as a sequence.
+  Serialise a partial axial algebra element as a sequence.  Use sparse form if the degree is greater than sparse_dim.  Set sparse_dim to e negative to force non-sparse form.
   }
-  return JSON(x`elt: nl:=nl);
+  return JSON(x`elt: nl:=nl, sparse_dim:=sparse_dim);
 end intrinsic;
 
-intrinsic JSON(x::ModTupFldElt : nl:="\n") -> MonStgElt
+intrinsic JSON(x::ModTupRngElt : nl:="\n", sparse_dim:=10) -> MonStgElt
   {
-  Serialise a vector as a sequence.
+  Serialise a vector as a sequence.  Use sparse form if the degree is greater than sparse_dim.  Set sparse_dim to e negative to force non-sparse form.
+
   }
-  return JSON(Eltseq(x): nl:=nl);
+  if sparse_dim ge 0 and Degree(x) gt sparse_dim then
+    return JSON(SparseMatrix(x): nl:=nl);
+  else
+    return JSON(Eltseq(x): nl:=nl);
+  end if;
 end intrinsic;
 
-intrinsic JSON(x::ModTupFld : nl:="\n") -> MonStgElt
+intrinsic JSON(x::ModTupRng : nl:="\n", sparse_dim:=10) -> MonStgElt
   {
-  Serialise a vector (sub)space as a sequence of basis elements.
+  Serialise a vector (sub)space as a sequence of basis elements.  Use sparse form if the degree is greater than sparse_dim.  Set sparse_dim to e negative to force non-sparse form.
   }
-  return JSON(Basis(x): nl:=nl);
+  if sparse_dim ge 0 and Degree(x) gt sparse_dim then
+    return JSON(SparseMatrix(BasisMatrix(x)): nl:=nl);
+  else
+    return JSON([ Eltseq(v): v in Basis(x)]: nl:=nl);
+  end if;
 end intrinsic;
 
 intrinsic JSON(x::Set : nl:="\n") -> MonStgElt
@@ -310,6 +320,10 @@ intrinsic ParAxlAlgToList(A::ParAxlAlg: subalgs:=0) -> List
   
   gen_mat := ActionGenerators(A`Wmod);
   assert #gen eq #gen_mat;
+
+  if Dimension(A) gt 10 then
+    gen_mat := [ SparseMatrix(M) : M in gen_mat];
+  end if;
   Append(~alg, <"Wmod", [* [* gen[i], gen_mat[i] *] : i in [1..#gen] *]>);
   
   Append(~alg, <"V", A`V>);
@@ -323,6 +337,7 @@ intrinsic ParAxlAlgToList(A::ParAxlAlg: subalgs:=0) -> List
   
   Append(~alg, <"GSet_to_axes", [* [* Position(Image(A`GSet_to_axes), A`axes[i]`id`elt), i *] : i in [1..#A`axes] *]>);
   
+  mult := [SparseMatrix(Matrix(A`mult[i])) : i in [1..#A`mult]];
   Append(~alg, <"mult", A`mult>);
   
   axes := [];
@@ -374,6 +389,24 @@ end intrinsic;
 //
 // =============== Code to load a ParAxlAlg ================
 //
+/*
+
+A useful intrinsic to load in a saved subspace
+
+*/
+intrinsic Subspace(W::ModTupRng, L::List) -> ModTupRng
+  {
+  Load a subspace stored in List form.
+  }
+  return sub<W | [ W | Numbers(v): v in L]>;
+end intrinsic;
+
+intrinsic Subspace(W::ModTupRng, S::Assoc) -> ModTupRng
+  {
+  Load a subspace stored in sparse matrix form.
+  }
+  return RowSpace(SparseMatrix(BaseRing(W), S));
+end intrinsic;
 /*
 
 Loads just enough of the file to get the shape info
@@ -510,7 +543,7 @@ intrinsic PartialAxialAlgebra(alg::Assoc) -> ParAxlAlg
   A`Wmod := GModule(G, MatrixAlgebra<F, Nrows(mats[1]) | mats >);
 
   A`W := RSpace(F, Dimension(A`Wmod));
-  A`V := sub<A`W | [Numbers(v): v in alg["V"]]>;
+  A`V := Subspace(A`W, alg["V"]);
 
   A`fusion_table := FusionTable(alg["table"]);
 
@@ -520,11 +553,15 @@ intrinsic PartialAxialAlgebra(alg::Assoc) -> ParAxlAlg
     return A;
   end if;
   
-  A`mult := [ [ A`W!Numbers(row): row in mat ]: mat in alg["mult"]];
+  if Type(alg["mult"][1]) eq Assoc then
+    A`mult := [ Rows(Matrix(SparseMatrix(F, S))) : S in alg["mult"]];
+  else
+    A`mult := [ [ A`W!Numbers(row): row in mat ]: mat in alg["mult"]];
+  end if;
 
   if "subalgs" in keys then
     subalgs := New(SubAlg);
-    subalgs`subsps := [* sub<A`W | [Numbers(v) : v in bas]> : bas in alg["subalgs"]["subsps"] *];
+    subalgs`subsps := [* Subspace(A`W, bas) : bas in alg["subalgs"]["subsps"] *];
     subalgs`algs := {@ PartialAxialAlgebra(x) : x in alg["subalgs"]["algs"] @};
     
     subalgs`maps := [* *];
@@ -548,12 +585,12 @@ intrinsic PartialAxialAlgebra(alg::Assoc) -> ParAxlAlg
     
     idem`even := AssociativeArray();
     for k in Keys(alg["axes"][i]["even"]) do
-      idem`even[eval(k)] := sub<A`W | [A`W | A`W!Numbers(x) : x in alg["axes"][i]["even"][k]]>;
+      idem`even[eval(k)] := Subspace(A`W, alg["axes"][i]["even"][k]);
     end for;
 
     idem `odd := AssociativeArray();    
     for k in Keys(alg["axes"][i]["odd"]) do
-      idem`odd[eval(k)] := sub<A`W | [A`W | A`W!Numbers(x) : x in alg["axes"][i]["odd"][k]]>;
+      idem`odd[eval(k)] := Subspace(A`W, alg["axes"][i]["odd"][k]);
     end for;
     Append(~A`axes, idem);
   end for;

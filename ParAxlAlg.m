@@ -86,13 +86,13 @@ intrinsic Print(A::ParAxlAlg)
   if assigned A`axes then
     // The algebra should not be 0-dim
     if Dimension(A`W) eq Dimension(A`V) then
-      printf "A complete axial algebra for the group %o, of shape %o, dimension %o and %o axes in %o class%o.", GroupName(A`group), &cat [sh[2] : sh in A`shape], Dimension(A`W), num_axes, #A`axes, #A`axes eq 1 select "" else "es";
+      printf "A complete axial algebra for the group %o, %o axes, of shape %o and dimension %o.", GroupName(A`Miyamoto_group), num_axes, &cat [sh[2] : sh in A`shape], Dimension(A`W);
     else
-      printf "Partial axial algebra for the group %o, of shape %o, dimension %o, with known multiplication of dimension %o and %o axes in %o class%o.", GroupName(A`group), &cat [sh[2] : sh in A`shape], Dimension(A`W), Dimension(A`V), num_axes, #A`axes, #A`axes eq 1 select "" else "es";
+      printf "Partial axial algebra for the group %o, %o axes, of shape %o, dimension %o, with known multiplication of dimension %o.", GroupName(A`Miyamoto_group), num_axes, &cat [sh[2] : sh in A`shape], Dimension(A`W), Dimension(A`V);
     end if;
   else
     assert Dimension(A`W) eq 0;
-    printf "A 0-dimensional complete axial algebra for the group %o, of shape %o and %o axes.", GroupName(A`group), &cat [sh[2] : sh in A`shape], Dimension(A`W), Dimension(A`V), num_axes;
+    printf "A 0-dimensional complete axial algebra for the group %o, %o axes, of shape %o.", GroupName(A`Miyamoto_group), num_axes, &cat [sh[2] : sh in A`shape];
   end if;
 end intrinsic;
 
@@ -296,6 +296,71 @@ intrinsic ChangeRing(A::ParAxlAlg, F::Rng) -> ParAxlAlg
 
   return Anew;
 end intrinsic;
+
+intrinsic RestrictToMiyamotoGroup(A::ParAxlAlg) -> ParAxlAlg
+  {
+  Return the algebrA where the group is restricted to the Miyamoto group.
+  }
+  if A`Miyamoto_group eq A`group then
+    return A;
+  end if;
+  
+  Anew := New(ParAxlAlg);
+  Miy := sub<Group(A) | Image(A`tau)>;
+  ReduceGenerators(~Miy);
+  Anew`group := Miy;
+  Anew`Miyamoto_group := Miy;
+  Anew`GSet := GSet(Miy, A`GSet);
+  Anew`tau := map<Anew`GSet -> Miy | i:->i@A`tau>;
+  Anew`shape := A`shape;
+  Anew`number_of_axes := #Anew`GSet;
+  Anew`fusion_table := A`fusion_table;
+  
+  Anew`Wmod := Restriction(A`Wmod, Miy);
+  Anew`W := A`W;
+  Anew`V := A`V;
+  Anew`mult := A`mult;
+  Anew`GSet_to_axes := map<Anew`GSet -> Anew`W | i :-> i@A`GSet_to_axes>;
+  
+  Anew`subalgs := A`subalgs;
+  Anew`rels := A`rels;
+  
+  // We might have more axes classes than before
+  orig_axes := {@ j : i in [1..#A`axes] | so where so := exists(j){j : j in A`GSet | j@A`GSet_to_axes eq A`axes[i]`id`elt} @};
+  
+  axis_classes := Sort({@ Representative(o) : o in Orbits(Miy, A`GSet) @});
+  
+  axes :=[];
+  for ii in [1..#axis_classes] do
+    i := axis_classes[ii];
+    so := exists(t){<j, g> : j in orig_axes | so where so, g := IsConjugate(Group(A`GSet), A`GSet, j, i)};
+    assert so;
+    jj, g := Explode(t);
+    j := Position(orig_axes, jj);
+    
+    idem := New(AxlAxis);
+    idem`id := Anew!((A`axes[j]`id*g)`elt);
+    assert i@Anew`GSet_to_axes eq idem`id`elt;
+    idem`stab := A`axes[j]`stab^g;
+    idem`inv := A`axes[j]`inv^g;
+    idem`odd := AssociativeArray();
+    idem`even := AssociativeArray();
+        
+    if IsIdentity(g) then
+      for gr in {"odd", "even"}, k in Keys(A`axes[j]``gr) do
+        idem``gr[k] := A`axes[j]``gr[k];
+      end for;
+    else
+      for gr in {"odd", "even"}, k in Keys(A`axes[j]``gr) do
+        idem``gr[k] := sub<Anew`W | [Anew`W | ((A!v)*g)`elt : v in Basis(A`axes[j]``gr[k])]>;
+      end for;
+    end if;
+      Append(~axes, idem);
+  end for;
+  Anew`axes := axes;
+  
+  return Anew;
+end intrinsic;
 /*
 
 m-closed
@@ -393,18 +458,25 @@ intrinsic IsEqual(A::ParAxlAlg, B::ParAxlAlg) -> BoolElt
   if not forall{ attr : attr in attrs | assigned A``attr eq assigned B``attr} then
     return false;
   end if;
-  for attr in attrs diff {"Wmod", "subalgs", "axes"} do
+  for attr in attrs diff {"Wmod", "subalgs", "axes", "tau", "GSet_to_axes"} do
     if assigned A``attr and A``attr ne B``attr then
       return false;
     end if;
   end for;
   
   // Now we need to check the other items
-  if not IsEqual(A`Wmod, B`Wmod) then
+  so, iso := IsIsomorphic(A`Miyamoto_group, B`Miyamoto_group);
+  if not so then
+    return false;
+  elif not IsEqual(A`Wmod, B`Wmod) then
     return false;
   elif assigned A`subalgs and not IsEqual(A`subalgs, B`subalgs) then
     return false;
   elif #A`axes ne #B`axes or not forall{ i : i in [1..#A`axes] | IsEqual(A`axes[i], B`axes[i])} then;
+    return false;
+  elif [ i@A`tau@iso : i in A`GSet] ne [i@B`tau : i in B`GSet] then
+    return false;
+  elif Image(A`GSet_to_axes) ne Image(B`GSet_to_axes) then
     return false;
   end if;
   return true;
@@ -466,12 +538,6 @@ intrinsic 'in'(x::ParAxlAlgElt, U::ModTupRng) -> BoolElt
   require U subset Parent(x)`W: "U is not a subspace of the axial algebra containing x.";
   return x`elt in U;
 end intrinsic;
-/*
-intrinsic 'in'(a:: ModTupFldElt, A::ParAxlAlg) -> BoolElt
-  {}
-  return a in A`W;
-end intrinsic;
-*/
 
 // maybe this should be a function?
 intrinsic CreateElement(A::ParAxlAlg, x::.) -> ParAxlAlgElt
