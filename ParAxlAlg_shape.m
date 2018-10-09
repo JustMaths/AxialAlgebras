@@ -410,7 +410,7 @@ end intrinsic;
 
 Checks isomorphism of shapes.
 
-NB this will automoatically restrict to an automorphism of the Miyamoto groups.
+NB this will automatically restrict to an automorphism of the Miyamoto groups.
 
 */
 intrinsic IsIsomorphic(Ax1::GSet, tau1::Map, shape1::SeqEnum, Ax2::GSet, tau2::Map, shape2::SeqEnum) -> BoolElt, GrpPermElt, Map
