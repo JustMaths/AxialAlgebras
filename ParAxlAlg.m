@@ -190,6 +190,8 @@ intrinsic ChangeField(A::ParAxlAlg, F::Fld, f::Map) -> ParAxlAlg
   Anew`GSet_to_axes := map<Anew`GSet -> Anew`W | i:-> i@A`GSet_to_axes>;
   Anew`number_of_axes := A`number_of_axes;
   Anew`fusion_table := new_fusion_table;
+  Anew`group := A`group;
+  Anew`Miyamoto_group := A`Miyamoto_group;
   
   if assigned A`subalgs then
     subalgs := New(SubAlg);
