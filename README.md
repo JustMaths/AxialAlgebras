@@ -55,6 +55,10 @@ We can now try to complete it into a full axial algebra.
 
     A := AxialReduce(A);
 
+There are a number of verbose settings, between 1 and 4, with 4 giving timing information for all the operations.
+
+    SetVerbose("ParAxlAlg", 2);
+
 ## Properties
 
 We have several functions to get information about our algebra `A`.  Firstly,
