@@ -32,12 +32,12 @@ end function;
 We define an initial object
 
 */
-intrinsic PartialAxialAlgebra(L::List: fusion_table := MonsterFusionTable(), subalgebras:="maximal", partial := false, field:= QQ, subgroups := subalgebras eq "all" select Subgroups(Group(L[1])) else []) -> ParAxlAlg
+intrinsic PartialAxialAlgebra(L::List: fusion_table := MonsterFusionTable(), subalgebras:="maximal", partial := false, field:= QQ, subgroups := subalgebras eq "all" select [ H`subgroup : H in Subgroups(sub<Group(L[1])| Image(L[2])>)] else [], shape_stabiliser:=true) -> ParAxlAlg
   {
   Given an L = [Ax, tau, shape] containing a GSet Ax for a group G, a map tau: Ax -> involutions of G and a shape for the algebra, we define an initial object.  shape should be given as a sequence of tuples <o, type>, where the axes o[1] and o[2] generate a subalgebra of the given type with axes o.
   }
   require Type(L[1]) eq GSetIndx and Type(L[2]) eq Map and Type(L[3]) eq SeqEnum: "The list of parameters is not in the required form.";
-  return PartialAxialAlgebra(L[1],L[2],L[3]: fusion_table:=fusion_table, subalgebras := subalgebras, field:=field, subgroups :=subgroups);
+  return PartialAxialAlgebra(L[1],L[2],L[3]: fusion_table:=fusion_table, subalgebras := subalgebras, field:=field, subgroups :=subgroups, shape_stabiliser:=shape_stabiliser);
 end intrinsic;
 /*
 
@@ -61,6 +61,7 @@ intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_tab
   if shape_stabiliser then
     Ax, phi := ShapeStabiliserAction(Ax, tau, shape);
     tau := tau*phi;
+    subgroups := subgroups@phi;
   end if;
     
   A`GSet := Ax;
