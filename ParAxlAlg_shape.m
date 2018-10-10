@@ -447,7 +447,7 @@ intrinsic IsIsomorphic(Ax1::GSet, tau1::Map, shape1::SeqEnum, Ax2::GSet, tau2::M
   N := Normaliser(GAx2, GG2);
 
   // We must define equality of maps
-  orb_reps := {@ o[1] : o in Orbits(G2, Ax2)@};
+  orb_reps := {@ o[1] : o in Orbits(Miy2, Ax2)@};
   MapEq := function(f,g)
     return forall{i: i in orb_reps | i@f eq i@g};
   end function;
@@ -455,7 +455,7 @@ intrinsic IsIsomorphic(Ax1::GSet, tau1::Map, shape1::SeqEnum, Ax2::GSet, tau2::M
   // The action on tau maps is
   // tau_n := tau(i^(n^-1))^n
   
-  so := exists(n){n : n in N | MapEq(tau2, map<Ax2 -> G2 |
+  so := exists(n){n : n in N | MapEq(tau2, map<Ax2 -> Group(Ax2) |
                         i:-> (((i^(n^-1))@tau_adj@act2)^n)@@act2>)};
   
   if not so then
@@ -494,7 +494,7 @@ end intrinsic;
 Find the stabiliser of a shape
 
 */
-intrinsic ShapeStabiliser(Ax::GSet, tau::Map, shape::SeqEnum) -> GrpPerm, Map
+intrinsic ShapeStabiliserAction(Ax::GSet, tau::Map, shape::SeqEnum) -> GSet, Map
   {
   Find the stabiliser of the shape.
   }
@@ -504,7 +504,7 @@ intrinsic ShapeStabiliser(Ax::GSet, tau::Map, shape::SeqEnum) -> GrpPerm, Map
   N := Group(Taus);
 
   if N eq GG then
-    return G, hom<G->G | GeneratorsSequence(G)>;
+    return Ax, hom<G->G | GeneratorsSequence(G)>;
   end if;
   
   Axnew := GSet(N);
@@ -526,7 +526,7 @@ intrinsic ShapeStabiliser(Ax::GSet, tau::Map, shape::SeqEnum) -> GrpPerm, Map
     stab := Stabiliser(stab, numAx[#sh[1]], sh);
   end for;
   
-  return stab, phi;
+  return GSet(stab, Axnew), phi;
 end intrinsic;
 /*
 

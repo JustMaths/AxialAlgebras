@@ -59,8 +59,7 @@ intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_tab
   A := New(ParAxlAlg);
   
   if shape_stabiliser then
-    G, phi := ShapeStabiliser(Ax, tau, shape);
-    Ax := GSet(G);
+    Ax, phi := ShapeStabiliserAction(Ax, tau, shape);
     tau := tau*phi;
   end if;
     
