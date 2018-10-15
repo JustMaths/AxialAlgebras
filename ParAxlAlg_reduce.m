@@ -492,7 +492,7 @@ intrinsic ExpandSpace(A::ParAxlAlg: implement := true) -> ParAxlAlg, Map
   t := Cputime();
   require Dimension(A`W) ne Dimension(A`V): "You have already found the multiplication table to build a full algebra - no need to expand!";
   
-  vprintf ParAxlAlg, 1: "Expanding space from %o dimensions.\n", Dimension(A);
+  vprintf ParAxlAlg, 1: "Expanding algebra from %o dimensions.\n", Dimension(A);
   tt := Cputime();
   G := Group(A);
   W := A`W;
@@ -530,8 +530,9 @@ intrinsic ExpandSpace(A::ParAxlAlg: implement := true) -> ParAxlAlg, Map
   Anew`Wmod := Wmodnew;
   Anew`W := Wnew;
   Anew`V := W@WtoWnew;
+  vprintf ParAxlAlg, 2: "Expanded to %o dimensions.\n", Dimension(Anew`W);
   vprintf ParAxlAlg, 4: "Time taken to build modules and vector spaces %o.\n", Cputime(tt);
-
+  
   vprint ParAxlAlg, 2: "  Building the multiplication.";
   tt := Cputime();
   

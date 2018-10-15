@@ -86,13 +86,13 @@ intrinsic Print(A::ParAxlAlg)
   if assigned A`axes then
     // The algebra should not be 0-dim
     if Dimension(A`W) eq Dimension(A`V) then
-      printf "A complete axial algebra for the group %o, %o axes, of shape %o and dimension %o.", GroupName(A`Miyamoto_group), num_axes, &cat [sh[2] : sh in A`shape], Dimension(A`W);
+      printf "A %o-dimensional complete axial algebra for the group %o, %o axes, of shape %o", Dimension(A`W), GroupName(A`Miyamoto_group), num_axes, &cat [sh[2] : sh in A`shape];
     else
-      printf "Partial axial algebra for the group %o, %o axes, of shape %o, dimension %o, with known multiplication of dimension %o.", GroupName(A`Miyamoto_group), num_axes, &cat [sh[2] : sh in A`shape], Dimension(A`W), Dimension(A`V);
+      printf "Partial axial algebra for the group %o, %o axes, of shape %o, dimension %o, with known multiplication of dimension %o", GroupName(A`Miyamoto_group), num_axes, &cat [sh[2] : sh in A`shape], Dimension(A`W), Dimension(A`V);
     end if;
   else
     assert Dimension(A`W) eq 0;
-    printf "A 0-dimensional complete axial algebra for the group %o, %o axes, of shape %o.", GroupName(A`Miyamoto_group), num_axes, &cat [sh[2] : sh in A`shape];
+    printf "A 0-dimensional complete axial algebra for the group %o, %o axes, of shape %o", GroupName(A`Miyamoto_group), num_axes, &cat [sh[2] : sh in A`shape];
   end if;
 end intrinsic;
 
@@ -1061,11 +1061,21 @@ intrinsic BulkMultiply(mult::SeqEnum, I1::SeqEnum, I2::SeqEnum) -> SeqEnum
 end intrinsic;
 
 /*
-intrinsic SubConstructor(A::ParAxlAlg, tup) -> ParAxlAlg
+intrinsic SubConstructor(A::ParAxlAlg, seq) -> ParAxlAlg
   {}
-  G := Group(A);
-  require Type(tup[1]) eq GrpPerm and tup[1] subset G: "You have not provided a group";
-  H := tup[1];
+  axes := Image(A`GSet_to_axes);
+  if #seq eq 0 then
+    return sub<A`W|>;
+  end if;
+  if Type(seq[1]) eq ParAxlAlgElt then
+    seq := [ a`elt : a in seq ];
+  elif Type(seq[1]) eq SeqEnum then
+    seq := ChangeUniverse(seq, A`W);
+  end if;
+  require ISA(Type(seq[1]), ModTupRng): "You have not given a collection of vectors which represent elements of an algebra.";
+  
+  
+  
   S := {@ A| tup[i] : i in [2..#tup]@};
   Asub := New(ParAxlAlg);
   

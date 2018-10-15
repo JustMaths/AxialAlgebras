@@ -101,7 +101,7 @@ intrinsic HasFrobeniusForm(A::ParAxlAlg) -> BoolElt, AlgMatElt, RngIntElt
   if Dimension(A) eq 0 then
     return false,_,0;
   end if;
-  G := Group(A);
+  G := MiyamotoGroup(A);
   W := A`W;
   
   Ax := A`GSet;
@@ -136,12 +136,14 @@ intrinsic HasFrobeniusForm(A::ParAxlAlg) -> BoolElt, AlgMatElt, RngIntElt
     Append(~prods, newprods);
     U +:= UU;
     // We build a basis as we go along
-    j := 1;
-    while Dimension(sub<W|[t[3] : t in bas]>) lt Dimension(U) do
-      if IsIndependent([ t[3] : t in bas] cat [newprods[j,2]]) then
-        Append(~bas, <m,j,newprods[j,2]>);
-      end if;
-      j +:=1;
+    // We speed things up by working in the quotient
+    Q, quo := quo<U|[t[3] : t in bas]>;
+    Qprods := [ <j, newprods[j,2]> : j in [1..#newprods] ];
+    while Dimension(Q) ne 0 do
+      Qprods := [ <Qprods[j,1], v> : j in [1..#Qprods] | not IsZero(v) where v := Qprods[j,2]@quo ];
+      j, newvector := Explode(Qprods[1]);
+      Append(~bas, <m,j,newprods[j,2]>);
+      Q, quo := quo<Q| newvector>;    
     end while;
   end while;
   

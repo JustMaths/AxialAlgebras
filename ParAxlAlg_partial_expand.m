@@ -105,7 +105,7 @@ intrinsic PartialExpandSpace(A::ParAxlAlg, U::ModTupFld) -> ParAxlAlg, Map
   require #A`rels eq 0: "There are still relations to be modded out by";
   require not U subset (sub<W|A`rels> + V): "There is nothing to expand by.";
   
-  vprintf ParAxlAlg, 1: "Partially expanding space from %o dimensions.\n", Dimension(A);
+  vprintf ParAxlAlg, 1: "Partially expanding algebra from %o dimensions.\n", Dimension(A);
   tt := Cputime();
   // ensure that U is G-invariant
   U := GInvariantSubspace(Wmod, W, {@ W!u : u in Basis(U)@});
@@ -151,8 +151,8 @@ intrinsic PartialExpandSpace(A::ParAxlAlg, U::ModTupFld) -> ParAxlAlg, Map
   Anew`Wmod := Wmodnew;
   Anew`W := Wnew;
   Anew`V := (VX)@WtoWnew;
+  vprintf ParAxlAlg, 2: "Partially expanded to %o dimensions.\n", Dimension(Anew`W);
   vprintf ParAxlAlg, 4: "Time taken to build modules and vector spaces %o.\n", Cputime(tt);
-  vprintf ParAxlAlg, 4: "Module dimension is %o.\n", Dimension(Anew`W);
   
   vprint ParAxlAlg, 2: "  Building the multiplication.";
   tt := Cputime();
