@@ -168,22 +168,42 @@ intrinsic TauAction(Ax::GSet, tau_maps::SetIndx) -> GSet
   // N is the automorphism group of the action of G on Ax
   
   // We must define equality of maps
-  
   orb_reps := [Representative(o) : o in orbs];
   MapEq := function(f,g)
     return forall{i: i in orb_reps | i@f eq i@g};
   end function;
   
-  tau_return := function(f)
-    assert exists(g){g : g in tau_maps | MapEq(f,g)};
-    return g;
-  end function;
+  // We need to build the entire image as we cannot define a GSet without a domain and codomain for f
+  all_tau_maps := tau_maps;
   
+  update := procedure(~all_tau_maps, f)
+    so := exists(g){g : g in all_tau_maps | MapEq(f,g)};
+    if not so then
+      Include(~all_tau_maps, f);
+    end if;
+  end procedure;
+      
   // The action on tau maps is
   // tau_n := tau(i^(n^-1))^n
   
-  tausxN := CartesianProduct(tau_maps, N);
-  f := map< tausxN -> tau_maps | y :-> tau_return(map<Ax-> G | i:-> ((((i^(y[2]^-1))@y[1])@phi)^y[2])@@phi >) >;
+  act := function(tau, n)
+    return map<Ax-> G | i:-> ((((i^(n^-1))@tau)@phi)^n)@@phi >;
+  end function;
+  
+  for t in tau_maps do
+    for n in N do
+      update(~all_tau_maps, act(t, n));
+    end for;
+  end for;
+  
+  // define a lookup into all_tau_maps
+  tau_return := function(f)
+    assert exists(g){g : g in all_tau_maps | MapEq(f,g)};
+    return g;
+  end function;
+
+  tausxN := CartesianProduct(all_tau_maps, N);
+  f := map< tausxN -> all_tau_maps | y :-> tau_return(act(y[1], y[2])) >;
   Taus := GSet(N, tau_maps, f);
   
   return Taus;
@@ -550,12 +570,13 @@ intrinsic RestrictShape(Ax::GSet, tau::Map, shape::SeqEnum, axes::SetIndx : K :=
   
   for rep in defining_shape_reps do
     for o in rep do
-      // We only need to record the subalgebras which are define a connected component, not those which are contained in others.
-      // If the size of the largest subalgebra is 6, we need to record 4s and 6s
+      // We need to record the subalgebras in a rep which are not contained in another.  These are all 6s, 5s and 4s.
+      // If the size of the largest subalgebra is 6, we need to record 4s and 6s.
       // Otherwise, we just need to record the ones with size equal to the largest.
+      // in all cases this means recording all 4s, 5s, and 6s or the first in the rep (if it is a 2, or 3 then it is either the only one in the rep, or is contained in something larger).
       // Since components from the larger algebra may split but not join, a defining subalgebra in the larger algebra must either be defining in the smaller algebra, or not intersect at all.  So when identifying which subalgebras from the larger algebra are seen in the smaller, we need only consdier the defining subalgebras of the smaller algebra.
       
-      if (#rep[1] eq 6 and #o notin {4,6}) or #o ne #rep[1] then
+      if not (#o ge 4 or #o eq #rep[1]) then
         continue rep;
       end if;
       
