@@ -193,7 +193,16 @@ intrinsic ReduceSaturated(A::ParAxlAlg, U::ModTupFld) -> ParAxlAlg, Map
   W := A`W;
   Wmod := A`Wmod;
   V := A`V;
-  
+
+  Anew := New(ParAxlAlg);
+  Anew`GSet := A`GSet;
+  Anew`tau := A`tau;
+  Anew`shape := A`shape;
+  Anew`number_of_axes := A`number_of_axes;
+  Anew`fusion_table := A`fusion_table;
+  Anew`group := A`group;
+  Anew`Miyamoto_group := A`Miyamoto_group;
+
   // We must check whether the we are quotienting out anything in the subalgebras
   // If so, then we form the subalgebra quotients, pull back any relations and add them to U
 
@@ -219,12 +228,6 @@ intrinsic ReduceSaturated(A::ParAxlAlg, U::ModTupFld) -> ParAxlAlg, Map
 
         if Dimension(alg_new) eq 0 then
           // We have killed the entire subalgebra and hence modded out A by some axes.
-          Anew := New(ParAxlAlg);
-          Anew`GSet := A`GSet;
-          Anew`tau := A`tau;
-          Anew`shape := A`shape;
-          Anew`fusion_table := A`fusion_table;
-          Anew`number_of_axes := A`number_of_axes;
 
           Wnew, psi := quo<W | W>;
           Anew`W := Wnew;
@@ -272,12 +275,6 @@ intrinsic ReduceSaturated(A::ParAxlAlg, U::ModTupFld) -> ParAxlAlg, Map
 
   // We have grown U as much as possible, so now we form the quotient
   tt := Cputime();
-  Anew := New(ParAxlAlg);
-  Anew`GSet := A`GSet;
-  Anew`tau := A`tau;
-  Anew`shape := A`shape;
-  Anew`fusion_table := A`fusion_table;
-  Anew`number_of_axes := A`number_of_axes;
 
   Wnew, psi := quo<W | U>;
   Anew`Wmod, psi_mod := quo<Wmod | [Wmod | Wmod! u : u in Basis(U)] >;
@@ -295,8 +292,6 @@ intrinsic ReduceSaturated(A::ParAxlAlg, U::ModTupFld) -> ParAxlAlg, Map
   
   images := FastMatrix(Image(A`GSet_to_axes), psi_mat);
   Anew`GSet_to_axes := map<Anew`GSet -> Wnew | [ <i, images[i]> : i in Anew`GSet]>;
-  Anew`group := A`group;
-  Anew`Miyamoto_group := A`Miyamoto_group;
   
   vprintf ParAxlAlg, 4: "Time taken to build modules and vector spaces %o.\n", Cputime(tt);
   vprintf ParAxlAlg, 4: "Module dimension is %o.\n", Dimension(Anew`W);
@@ -646,7 +641,7 @@ intrinsic ExpandSpace(A::ParAxlAlg: implement := true) -> ParAxlAlg, Map
     even := FastMatrix(Basis(A`axes[i]`even[evens]), WtoWnew_mat)
           cat [ basmult[t[1], t[2]] : t in even_pairs];
 
-    assert IsIndependent(even);
+    assert2 IsIndependent(even);
 
     // These could have linear depedences with the above
     // NeCe + NoCo + NeNe + NoNo

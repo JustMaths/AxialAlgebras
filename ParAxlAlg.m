@@ -301,7 +301,7 @@ end intrinsic;
 
 intrinsic RestrictToMiyamotoGroup(A::ParAxlAlg) -> ParAxlAlg
   {
-  Return the algebrA where the group is restricted to the Miyamoto group.
+  Return the algebra where the group is restricted to the Miyamoto group.
   }
   if A`Miyamoto_group eq A`group then
     return A;
@@ -343,7 +343,7 @@ intrinsic RestrictToMiyamotoGroup(A::ParAxlAlg) -> ParAxlAlg
     idem := New(AxlAxis);
     idem`id := Anew!((A`axes[j]`id*g)`elt);
     assert i@Anew`GSet_to_axes eq idem`id`elt;
-    idem`stab := A`axes[j]`stab^g;
+    idem`stab := A`axes[j]`stab^g meet Miy;
     idem`inv := A`axes[j]`inv^g;
     idem`odd := AssociativeArray();
     idem`even := AssociativeArray();

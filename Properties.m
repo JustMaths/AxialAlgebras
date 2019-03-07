@@ -54,7 +54,7 @@ intrinsic PrintProperties(algs::SeqEnum, filename::MonStgElt: long := false, hea
       shapetype := &cat [ sh[2] : sh in A`shape];
     end if;
 
-    line := [ "$" cat GroupName(Group(A):TeX:=true) cat "$", num_axes, shapetype ];
+    line := [ "$" cat GroupName(MiyamotoGroup(A):TeX:=true) cat "$", num_axes, shapetype ];
     if Dimension(A) eq 0 then
       line cat:= [its(Dimension(A)), "0", "-"];
     elif Dimension(A) ne Dimension(A`V) then
@@ -202,7 +202,7 @@ intrinsic CheckSubalgebraConditions(A::ParAxlAlg) -> List
   Ax := A`GSet;
   tau := A`tau;
   shape := A`shape;
-  G := Group(A);
+  G := MiyamotoGroup(A);
   Ax_to_axes := A`GSet_to_axes;
   
   out := [* *];
