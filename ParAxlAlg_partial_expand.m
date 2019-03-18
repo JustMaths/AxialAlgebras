@@ -37,6 +37,7 @@ intrinsic SearchPartialExpansions(A::ParAxlAlg) -> ParAxlAlg
     // Check to see if we have found any relations or eigenvectors
     if Dimension(ImWR) ne 0 then
       if not assigned pullback then
+        vprint ParAxlAlg, 2: "Calculating pullback map.";
         pullback := Matrix([ ImW.i@@phi : i in [1..Dimension(ImW)]]);
       end if;
       Coeffs := {@ Coordinates(ImW, v) : v in Basis(ImWR)@};
@@ -48,11 +49,15 @@ intrinsic SearchPartialExpansions(A::ParAxlAlg) -> ParAxlAlg
         Eig := Apar`axes[i]``attr[key] meet ImW;
         if Dimension(Eig) ne Dimension(A`axes[i]``attr[key]) then
           if not assigned pullback then
+            vprint ParAxlAlg, 2: "Calculating pullback map.";
             pullback := Matrix([ ImW.i@@phi : i in [1..Dimension(ImW)]]);
           end if;
           Coeffs := [ Coordinates(ImW, v) : v in Basis(Eig)];
+          dim := Dimension(A`axes[i]``attr[key]);
           A`axes[i]``attr[key] +:= sub<A`W| FastMatrix(Coeffs, pullback)>;
-          vprintf ParAxlAlg, 2: "Found new eigenvalues for %o\n", key;
+          if Dimension(A`axes[i]``attr[key]) ne dim then
+            vprintf ParAxlAlg, 2: "Found new eigenvalues for %o\n", key;
+          end if;
         end if;
       end for;
     end for;

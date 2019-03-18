@@ -520,7 +520,7 @@ end intrinsic;
 
 intrinsic 'eq'(x::ParAxlAlgElt, y::ParAxlAlgElt) -> BoolElt
   {
-  Returns whether x is in A.
+  Equality of elements.
   }
   require x`parent eq y`parent: "The two elements are not in the same partial axial algebra.";
   return x`elt eq y`elt;
@@ -544,7 +544,7 @@ end intrinsic;
 // maybe this should be a function?
 intrinsic CreateElement(A::ParAxlAlg, x::.) -> ParAxlAlgElt
   {
-  Creates a element.
+  Creates an element.
   }
   xx := New(ParAxlAlgElt);
   xx`parent := A;
@@ -590,6 +590,13 @@ intrinsic Eltseq(x::ParAxlAlgElt) -> SeqEnum
   Returns the sequence of coefficients of x`elt.
   }
   return Eltseq(x`elt);
+end intrinsic;
+
+intrinsic Vector(x::ParAxlAlgElt) -> ModTupFld
+  {
+  Returns the vector.
+  }
+  return x`elt;
 end intrinsic;
 
 intrinsic IsZero(x::ParAxlAlgElt) -> BoolElt
