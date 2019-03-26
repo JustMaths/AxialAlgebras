@@ -52,6 +52,17 @@ intrinsic Shapes(G::GrpPerm) -> SeqEnum
 
   return all_shapes;
 end intrinsic;
+
+intrinsic ShapePrint(shapes)
+  {
+  Prints the shapes in a nice way.
+  }
+  require Type(shapes) in {List, SeqEnum} : "The given sequence does not describe shapes of an algebra";
+  if #shapes ne 0 then
+    require {#sh : sh in shapes} eq {3} and forall{sh : sh in shapes | Type(sh[2]) eq Map and ExtendedType(sh[3]) eq SeqEnum[Tup]}: "The given sequence does not describe shapes of an algebra";
+  end if;
+  print [ <GroupName(Group(sh[1])), [#o : o in Orbits(Group(sh[1]), sh[1])], &cat[t[2] : t in sh[3]]> : sh in shapes];
+end intrinsic;
 /*
 
 Returns the GSets which are got in the old way.
@@ -168,23 +179,44 @@ intrinsic TauAction(Ax::GSet, tau_maps::SetIndx) -> GSet
   // N is the automorphism group of the action of G on Ax
   
   // We must define equality of maps
-  
   orb_reps := [Representative(o) : o in orbs];
   MapEq := function(f,g)
     return forall{i: i in orb_reps | i@f eq i@g};
   end function;
   
-  tau_return := function(f)
-    assert exists(g){g : g in tau_maps | MapEq(f,g)};
-    return g;
-  end function;
+  // We need to build the entire image as we cannot define a GSet without a domain and codomain for f
+  all_tau_maps := tau_maps;
   
+  update := procedure(~all_tau_maps, f)
+    so := exists(g){g : g in all_tau_maps | MapEq(f,g)};
+    if not so then
+      // NB Include throws an error here!
+      all_tau_maps join:= {@ f @};
+    end if;
+  end procedure;
+      
   // The action on tau maps is
   // tau_n := tau(i^(n^-1))^n
   
-  tausxN := CartesianProduct(tau_maps, N);
-  f := map< tausxN -> tau_maps | y :-> tau_return(map<Ax-> G | i:-> ((((i^(y[2]^-1))@y[1])@phi)^y[2])@@phi >) >;
-  Taus := GSet(N, tau_maps, f);
+  act := function(tau, n)
+    return map<Ax-> G | i:-> ((((i^(n^-1))@tau)@phi)^n)@@phi >;
+  end function;
+  
+  for t in tau_maps do
+    for n in N do
+      update(~all_tau_maps, act(t, n));
+    end for;
+  end for;
+  
+  // define a lookup into all_tau_maps
+  tau_return := function(f)
+    assert exists(g){g : g in all_tau_maps | MapEq(f,g)};
+    return g;
+  end function;
+
+  tausxN := CartesianProduct(all_tau_maps, N);
+  f := map< tausxN -> all_tau_maps | y :-> tau_return(act(y[1], y[2])) >;
+  Taus := GSet(N, all_tau_maps, f);
   
   return Taus;
 end intrinsic;
@@ -437,7 +469,7 @@ intrinsic IsIsomorphic(Ax1::GSet, tau1::Map, shape1::SeqEnum, Ax2::GSet, tau2::M
     return false, _, _;
   end if;
   homg := hom<Miy1 -> Miy2 | [<g,((g@act1)^perm)@@act2> : g in Generators(Miy1) join {Miy1!1}]>;
-  assert forall{<i,g> : i in Ax1, g in Generators(Miy1) | Image(g,Ax1,i)^perm eq Image(g@homg, Ax2, i^perm)};
+  assert2 forall{<i,g> : i in Ax1, g in Generators(Miy1) | Image(g,Ax1,i)^perm eq Image(g@homg, Ax2, i^perm)};
   
   // We form the tau map for the conjugated Ax1
   tau_adj := map<Ax2 -> Group(Ax2) | i:->(i^(perm^-1))@tau1@homg>;
@@ -464,7 +496,7 @@ intrinsic IsIsomorphic(Ax1::GSet, tau1::Map, shape1::SeqEnum, Ax2::GSet, tau2::M
   
   perm := perm*n;
   homg := hom<Miy1 -> Miy2 | [<g,((g@act1)^perm)@@act2> : g in Generators(Miy1) join {Miy1!1}]>;
-  assert MapEq(tau2, map<Ax2 -> Group(Ax2) | i:->(i^(perm^-1))@tau1@homg>);
+  assert2 MapEq(tau2, map<Ax2 -> Group(Ax2) | i:->(i^(perm^-1))@tau1@homg>);
   
   // Now we check to see if the shapes are the same
   
@@ -485,7 +517,7 @@ intrinsic IsIsomorphic(Ax1::GSet, tau1::Map, shape1::SeqEnum, Ax2::GSet, tau2::M
   
   perm := perm*h;
   homg := hom<Miy1 -> Miy2 | [<g,((g@act1)^perm)@@act2> : g in Generators(Miy1) join {Miy1!1}]>;
-  assert MapEq(tau2, map<Ax2 -> Group(Ax2) | i:->(i^(perm^-1))@tau1@homg>);
+  assert2 MapEq(tau2, map<Ax2 -> Group(Ax2) | i:->(i^(perm^-1))@tau1@homg>);
     
   return true, perm, homg;
 end intrinsic;
@@ -550,12 +582,13 @@ intrinsic RestrictShape(Ax::GSet, tau::Map, shape::SeqEnum, axes::SetIndx : K :=
   
   for rep in defining_shape_reps do
     for o in rep do
-      // We only need to record the subalgebras which are define a connected component, not those which are contained in others.
-      // If the size of the largest subalgebra is 6, we need to record 4s and 6s
+      // We need to record the subalgebras in a rep which are not contained in another.  These are all 6s, 5s and 4s.
+      // If the size of the largest subalgebra is 6, we need to record 4s and 6s.
       // Otherwise, we just need to record the ones with size equal to the largest.
+      // in all cases this means recording all 4s, 5s, and 6s or the first in the rep (if it is a 2, or 3 then it is either the only one in the rep, or is contained in something larger).
       // Since components from the larger algebra may split but not join, a defining subalgebra in the larger algebra must either be defining in the smaller algebra, or not intersect at all.  So when identifying which subalgebras from the larger algebra are seen in the smaller, we need only consdier the defining subalgebras of the smaller algebra.
       
-      if (#rep[1] eq 6 and #o notin {4,6}) or #o ne #rep[1] then
+      if not (#o ge 4 or #o eq #rep[1]) then
         continue rep;
       end if;
       
@@ -590,178 +623,89 @@ intrinsic RestrictShape(Ax::GSet, tau::Map, shape::SeqEnum, axes::SetIndx : K :=
 end intrinsic;
 /*
 
-Find all the helpful subalgebras we could glue in by checking maximal subgroups.  Has a switch so to check if we have computed them and if so returns the gluing information.
+Find all the helpful subalgebras we could glue in by checking subgroups.  Has a switch so to check if we have computed them and if so returns the gluing information.
 
 */
-intrinsic MaximalGluingSubalgebras(L::List: field := Rationals(), gluing := false, partial := false) -> List, SeqEnum
+intrinsic GluingSubalgebras(L::List: subgroups := "maximal", field := Rationals(), FT := MonsterFusionTable(), gluing := false, partial := false) -> List, SeqEnum
   {
   This routine expects a List [* Ax, tau, shape *] and has two functions:
 
-  If gluing = false (default), then given a field and the information for a axial algebra, it returns which maximal subalgebras would be used to glue in.
+  If gluing = false (default), then given a field and the information for a axial algebra, it returns which subalgebras would be used to glue in.
   
   If gluing = true, then it returns a list of tuples <filename, map, homg> for subalgebras which have already been computed.  Here, if axes are the set of axes in Ax for a subalgebra, whose generated by the tau map is K, then map is a map from axes to the axes of the subalgebra and homg is an isomorphism from K to Group(subalgebra).
   
   The function also returns a set of flags showing which shapes have been covered by the subalgebras.
+  
+  Optional parameters:
+    subgroups - "maximal" (default) uses the maximal subgroups, "all" uses all subgroups, or user can give a sequence of subgroups.
+    partial - whether we consider partial algebras.
+    FT - fusion table.
   }
   require #L eq 3 and Type(L[2]) eq Map and Type(L[3]) eq SeqEnum: "The input is not of the required form";
 
-  return MaximalGluingSubalgebras(L[1], L[2], L[3]:field := field, gluing := gluing, partial := partial);
+  return GluingSubalgebras(L[1], L[2], L[3]:
+            subgroups := subgroups, field := field, FT := FT, gluing := gluing, partial := partial);
 end intrinsic;
 
-intrinsic MaximalGluingSubalgebras(Ax::GSet, tau::Map, shape::SeqEnum: field := Rationals(), FT := MonsterFusionTable(), gluing := false, partial := false) -> List, SeqEnum
+intrinsic GluingSubalgebras(Ax::GSet, tau::Map, shape::SeqEnum: subgroups := "maximal", field := Rationals(), FT := MonsterFusionTable(), gluing := false, partial := false) -> List, SeqEnum
   {
   This routine has two functions:
 
-  If gluing = false (default), then given a field and the information for a axial algebra, it returns which maximal subalgebras would be used to glue in.
+  If gluing = false (default), then given a field and the information for a axial algebra, it returns which subalgebras would be used to glue in.
   
   If gluing = true, then it returns a list of tuples <filename, map, homg> for subalgebras which have already been computed.  Here, if axes are the set of axes in Ax for a subalgebra, whose generated by the tau map is K, then map is a map from axes to the axes of the subalgebra and homg is an isomorphism from K to Group(subalgebra).
   
   The function also returns a set of flags showing which shapes have been covered by the subalgebras.
+  
+  Optional parameters:
+    subgroups - "maximal" (default) uses the maximal subgroups, "all" uses all subgroups, or user can give a sequence of subgroups.
+    partial - whether we consider partial algebras.
+    FT - fusion table.
   }
   Miy := sub<Group(Ax)| Image(tau)>;
-  maxes := [Miy] cat [ rec`subgroup : rec in MaximalSubgroups(Miy)];
   
-  maxsubalgs := [* *];
-  
-  shape_flags := [ false : sh in shape ];
-  
-  for max in maxes do
-    orbs := [ o : o in Orbits(max, Ax) | sub<Miy | o@tau> subset max];
-    subsets := [ S : S in Subsets({1..#orbs}) | S ne {}];
-    Sort(~subsets, func<x,y|#y-#x>);
-    if max eq Miy then
-      Remove(~subsets, 1);
+  // Build the list of subgroups to check
+  if Type(subgroups) eq MonStgElt then
+    require subgroups in {"all", "maximal"}: "subgroups must be \"all\", \"maximal\", or a sequence of subgroups";
+    if subgroups eq "all" then
+      subgroups := Reverse([ H`subgroup : H in Subgroups(Miy)]);
+    else
+      subgroups := [Miy] cat [ rec`subgroup : rec in MaximalSubgroups(Miy)];
     end if;
-        
-    // We loop over all subsets.
-    // if gluing = false, then just consider the maximal subset and return what the group and shape is for that
-    // if gluing = true, then check to see whether it has been computed and if not descend to find computed algebras to glue in.  Dedupe by containment.
-    
-    while #subsets ne 0 do
-      set := subsets[1];
-      axes := &join orbs[Setseq(set)];
-      Sort(~axes);
-      K := sub<Miy | FewGenerators(sub<Miy | axes@tau>)>;
-      
-      num := IndexedSet([1..#axes]);
-      numxK := CartesianProduct(num, K);
-      f := map<numxK -> num | y:-> Position(axes, Image(y[2], Ax, axes[y[1]]))>;
-      Kx := GSet(K, num, f);
-      
-      // Find a faithful action of a subgroup, K is a central extension of this.
-      phi, K_faithful := Action(K, Kx);
-      Kx_faithful := GSet(K_faithful, Kx);
-      if IsTrivial(K_faithful) then
-        Remove(~subsets, 1);
-        continue;
-      end if;
-      
-      Ktau := map<Kx -> K | i:-> axes[i]@tau>;
-      Ktau_faithful := Ktau*phi;
-      // I don't think this can happen!!
-      if not IsAdmissibleTauMap(Kx_faithful, Ktau_faithful) then
-        print "tau not addmissible.";
-        Remove(~subsets, 1);
-        continue;
-      end if;
-      
-      Kshape, flags := RestrictShape(Ax, tau, shape, axes: K := K);
-      Kshape := [ <{@ Position(axes, i) : i in t[1] @}, t[2]> : t in Kshape ];
-      
-      if not gluing then
-        // We find the GSet, tau and shape for the maximal object only
-        subsets := [ S : S in subsets |  not S subset set ];
-        Append(~maxsubalgs, [*Kx_faithful, Ktau_faithful, Kshape*]);
-        
-        Or(~shape_flags, flags);
-        continue;
-      else
-        // We wish to search for any subalgebras and check whether we have completed them
-        num_axes := &cat [ Sprintf("%o+", #o) : o in orbs[Setseq(set)]];
-        num_axes := num_axes[1..#num_axes-1];
-        
-        path := Sprintf("%o/%o/%m/%o/%o", library_location, FT`directory, field, MyGroupName(K_faithful), num_axes);
-        if not ExistsPath(path) then
-          Remove(~subsets, 1);
-          continue;
-        end if;
-        algs := ls(path);
-        
-        // We remove partial algebras from the list
-        if not partial then
-          algs := [ alg : alg in algs | "partial" notin alg];
-        end if;
-        
-        // We search for possible isomorphic algebras by checking the shape
-        alg_shapes := [ ParseShape(sh) : sh in algs];
-        shape_type := ParseShape(&cat[t[2] : t in Kshape]);
-        possibles := {@ i : i in [1..#alg_shapes] | alg_shapes[i] eq shape_type @};
-        
-        if #possibles eq 0 then
-          Remove(~subsets, 1);
-          continue;
-        end if;
-        
-        // Have to do it this slightly awkward way so the continue statement works...
-        so := false;
-        index := 1;
-        while not so and index le #possibles do
-          j := possibles[index];
-          alg_type := GetTypePartialAxialAlgebra(Sprintf("%o/%o", path, algs[j]));
-          _, alg_ax, alg_tau, alg_shape, dim := Explode(alg_type);
-          
-          so, perm, homg := IsIsomorphic(Kx_faithful, Ktau_faithful, Kshape, alg_ax, alg_tau, alg_shape);
-          index +:= 1;
-        end while;
-        
-        // There is no match
-        if not so then
-          Remove(~subsets, 1);
-          continue;
-        end if;
-        
-        // We have found a match
-        map := map< axes -> alg_ax | i :-> Position(axes, i)^perm>;
-        Or(~shape_flags, flags);
-        
-        // If the dimension is zero, it collapses the algebra and we return just this
-        if dim eq 0 then
-          return [*<Sprintf("%o/%o", path, algs[j]), map, phi*homg>*], shape_flags;
-        end if;
-        Append(~maxsubalgs, <Sprintf("%o/%o", path, algs[j]), map, phi*homg>);
-        subsets := [ S : S in subsets | not S subset set ];
-      end if;
-    end while;
-  end for;
+  else
+    require ExtendedType(subgroups) eq SeqEnum[GrpPerm]: "subgroups must be \"all\", \"maximal\", or a sequence of subgroups";
+    require forall{ H : H in subgroups | H subset Miy}: "The subgroups given are not contained in the Miyamoto group.";
 
-  return maxsubalgs, shape_flags;
-end intrinsic;
-
-intrinsic GluingSubalgebras(Ax::GSet, tau::Map, shape::SeqEnum: field := Rationals(), FT := MonsterFusionTable(), gluing := true, partial := false, subgroups := [ H`subgroup : H in Subgroups(sub<Group(Ax)| Image(tau)>)]) -> List, SeqEnum
-  {
-  This routine has two functions:
-
-  If gluing = false, then given a field and the information for a axial algebra, it returns which subalgebras would be used to glue in.
+    // Ensure the subgroups to search through are in the right order
+    Sort(~subgroups, func<x,y|Order(y)-Order(x)>);
+  end if;
   
-  If gluing = true (default), then it returns a list of tuples <filename, map, homg> for subalgebras which have already been computed.  Here, if axes are the set of axes in Ax for a subalgebra, whose generated by the tau map is K, then map is a map from axes to the axes of the subalgebra and homg is an isomorphism from K to Group(subalgebra).
-  
-  The function also returns a set of flags showing which shapes have been covered by the subalgebras.
-  }
-  Miy := sub<Group(Ax)| Image(tau)>;
-  require forall{ H : H in subgroups | H subset Miy}: "The subgroups given are not contained in the Miyamoto group.";
-  subalgs := [* *];
+  subalgs := [* *]; // our subalgs to return
   to_glue := {@ @}; // set of axes to have a subalgebra glued into.
   
-  // A procedure for removing subsets which we don't want to consider as we have already glued in something which contains it
+  // Given a sequence <glued> of axes we have already glued an subalgebra onto, orbits <orbs> of some group we are considering and possible sets <subsets> of indices of these, amend <subsets> to remove the sets of indices which give axes which are contained in a set in <glued>.
   procedure RemoveSubsets(~subsets, orbs, glued)
-    overalgs := [ { i : i in [1..#orbs] | orbs[i] subset X } : X in glued];
+    overalgs := { { i : i in [1..#orbs] | orbs[i] subset X } : X in glued};
     subsets := [ S : S in subsets | not exists{T : T in overalgs | S subset T} ];
+  end procedure;
+
+  // Procedure to add <subalg> on <axes> to the list <subalgs>, checking if <axes> are contained in, or contain a set of axes from glued
+  procedure AddSubalg(~subalgs, ~glued, subalg, axes)
+    is_subset := {@ i : i in [1..#glued] | axes subset glued[i] @};
+    is_overset := {@ i : i in [1..#glued] | glued[i] subset axes @};
+    
+    if #is_overset ne 0 then
+      subalgs := [* subalgs[i] : i in [1..#subalgs] | i notin is_overset *] cat [* subalg *];
+      glued := {@ glued[i] : i in [1..#glued] | i notin is_overset @} join {@ axes @};
+    elif #is_subset eq 0 then
+      Append(~subalgs, subalg);
+      Include(~glued, axes);
+    end if;
   end procedure;
   
   shape_flags := [ false : sh in shape ];
   
-  for i in Reverse([1..#subgroups]) do
-    H := subgroups[i];
+  for H in subgroups do
     orbs := [ o : o in Orbits(H, Ax) | sub<Miy | o@tau> subset H];
     subsets := [ S : S in Subsets({1..#orbs}) | S ne {}];
     RemoveSubsets(~subsets, orbs, to_glue);
@@ -779,8 +723,6 @@ intrinsic GluingSubalgebras(Ax::GSet, tau::Map, shape::SeqEnum: field := Rationa
       axes := &join orbs[Setseq(set)];
       Sort(~axes);
       K := sub<Miy | FewGenerators(sub<Miy | axes@tau>)>;
-      
-      // check whether we have already 
       
       num := IndexedSet([1..#axes]);
       numxK := CartesianProduct(num, K);
@@ -808,16 +750,14 @@ intrinsic GluingSubalgebras(Ax::GSet, tau::Map, shape::SeqEnum: field := Rationa
         // We find the GSet, tau and shape for the maximal elements
         Kshape, flags := RestrictShape(Ax, tau, shape, axes: K := K);
         Kshape := [ <{@ Position(axes, i) : i in t[1] @}, t[2]> : t in Kshape ];
-        subsets := [ S : S in subsets |  not S subset set ];
-        Append(~subalgs, [*Kx_faithful, Ktau_faithful, Kshape*]);
-        Include(~to_glue, axes);
+
+        AddSubalg(~subalgs, ~to_glue, [*Kx_faithful, Ktau_faithful, Kshape*], axes);
         RemoveSubsets(~subsets, orbs, {@ axes @});
-        
         Or(~shape_flags, flags);
         continue;
       else
         // We wish to search for any subalgebras and check whether we have completed them
-        num_axes := Join([ IntegerToString(#o) : o in orbs[Setseq(set)]], "+");
+        num_axes := Join([IntegerToString(#o) : o in Orbits(K_faithful, Kx_faithful)], "+");
         
         path := Sprintf("%o/%o/%m/%o/%o", library_location, FT`directory, field, MyGroupName(K_faithful), num_axes);
         if not ExistsPath(path) then
@@ -864,7 +804,6 @@ intrinsic GluingSubalgebras(Ax::GSet, tau::Map, shape::SeqEnum: field := Rationa
         
         // We have found a match
         map := map< axes -> alg_ax | i :-> Position(axes, i)^perm>;
-        Or(~shape_flags, flags);
         
         // If the dimension is zero, it collapses the algebra and we return just this
         if dim eq 0 then
@@ -872,9 +811,9 @@ intrinsic GluingSubalgebras(Ax::GSet, tau::Map, shape::SeqEnum: field := Rationa
           return [*<Sprintf("%o/%o", path, algs[j]), map, phi*homg>*], shape_flags;
         end if;
         
-        Append(~subalgs, <Sprintf("%o/%o", path, algs[j]), map, phi*homg>);
-        Include(~to_glue, axes);
+        AddSubalg(~subalgs, ~to_glue, <Sprintf("%o/%o", path, algs[j]), map, phi*homg>, axes);
         RemoveSubsets(~subsets, orbs, {@ axes @});
+        Or(~shape_flags, flags);
       end if;
     end while;
   end for;

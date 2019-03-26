@@ -32,28 +32,29 @@ end function;
 We define an initial object
 
 */
-intrinsic PartialAxialAlgebra(L::List: fusion_table := MonsterFusionTable(), subalgebras:="maximal", partial := false, field:= QQ, subgroups := subalgebras eq "all" select [ H`subgroup : H in Subgroups(sub<Group(L[1])| Image(L[2])>)] else [], shape_stabiliser:=true) -> ParAxlAlg
+intrinsic PartialAxialAlgebra(L::List: fusion_table := MonsterFusionTable(), field := QQ, subgroups := "maximal", partial := false, shape_stabiliser := true) -> ParAxlAlg
   {
   Given an L = [Ax, tau, shape] containing a GSet Ax for a group G, a map tau: Ax -> involutions of G and a shape for the algebra, we define an initial object.  shape should be given as a sequence of tuples <o, type>, where the axes o[1] and o[2] generate a subalgebra of the given type with axes o.
   }
   require Type(L[1]) eq GSetIndx and Type(L[2]) eq Map and Type(L[3]) eq SeqEnum: "The list of parameters is not in the required form.";
-  return PartialAxialAlgebra(L[1],L[2],L[3]: fusion_table:=fusion_table, subalgebras := subalgebras, field:=field, subgroups :=subgroups, shape_stabiliser:=shape_stabiliser);
+  return PartialAxialAlgebra(L[1],L[2],L[3]: fusion_table := fusion_table, field := field, subgroups := subgroups, partial := partial, shape_stabiliser := shape_stabiliser);
 end intrinsic;
 /*
 
 Build an initial partial algebra
 
 */
-intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_table := MonsterFusionTable(), subalgebras:="maximal", partial := false, field:= QQ, subgroups := subalgebras eq "all" select [ H`subgroup : H in Subgroups(sub<Group(Ax)| Image(tau)>)] else [], shape_stabiliser:=true) -> ParAxlAlg
+intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_table := MonsterFusionTable(), field := QQ, subgroups := "maximal", partial := false, shape_stabiliser := true) -> ParAxlAlg
   {
   Given a GSet Ax for a group G, a map tau: Ax -> involutions of G and a shape for the partial algebra, we define an initial object.  shape should be given as a sequence of tuples <o, type>, where the axes o[1] and o[2] generate a subalgebra of the given type with axes o.
   
   Optional arguments:
   fusion_table is a FusTab and defaults to the Monster fusion table.
-  maximal_subgroups is a Boolean and if true it tries to glue in known subalgebras with Miyamoto group a maximal subgroup of G.
+  subgroups toggles which subalgebras to glue in.  If "maximal" (default) then it checks for subalgebra coming from maximal subgroups, if "all" if check for subalgebras coming from all subgroups, if "none" it just uses the subalgebras in the shape, or the user can specify a sequence of subgroups of the Miyamoto group.
   field defaults to the rationals.
+  shape_stabiliser is a Boolean and if true extends the action to the stabiliser of the shape.
   }
-  require Type(fusion_table) eq FusTab: "The fuson table given is not in the required form.";
+  require Type(fusion_table) eq FusTab: "The fusion table given is not in the required form.";
   require IsField(field): "The field given is not a field!";
     
   A := New(ParAxlAlg);
@@ -61,7 +62,9 @@ intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_tab
   if shape_stabiliser then
     Ax, phi := ShapeStabiliserAction(Ax, tau, shape);
     tau := tau*phi;
-    subgroups := subgroups@phi;
+    if ExtendedType(subgroups) eq SeqEnum[GrpPerm] then
+      subgroups := subgroups@phi;
+    end if;
   end if;
     
   A`GSet := Ax;
@@ -89,21 +92,14 @@ intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_tab
   subalgs`algs := {@ @};
   subalgs`maps := [* *];
 
-  // We calculate the full shape which is the orbit of n idempotents for nX.
-  // This will help to identify which subalgebras to glue in.
-  // Also set up flags for when we have glued in a subalgebra which uses the full basic algebra of that shape.
+  // We set up flags for when we have glued in a subalgebra which uses the full basic algebra of that shape.
 
   shape_flags := [ false : sh in shape ];
   
   // We search for the subalgebras we have computed and glue them in.
 
-  if subalgebras in {"maximal", "all"} then
-    // find which subalgebras we can glue in
-    if subalgebras eq "maximal" then
-      gluingsubalgs, flags := MaximalGluingSubalgebras(Ax, tau, shape: field := field, gluing:=true);
-    else
-      gluingsubalgs, flags := GluingSubalgebras(Ax, tau, shape: field := field, gluing:=true, subgroups := subgroups);
-    end if;
+  if not (Type(subgroups) eq MonStgElt and subgroups eq "none") then
+    gluingsubalgs, flags := GluingSubalgebras(Ax, tau, shape: subgroups := subgroups, FT := fusion_table, field := field, gluing := true, partial := partial);
     
     for tup in gluingsubalgs do
       file, glue, homg := Explode(tup);
@@ -132,7 +128,7 @@ intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_tab
       
       homg := hom< H -> Group(alg) | [< g, g@homg> : g in FewGenerators(H)]>;
 
-      assert forall{ <v,g> : v in Basis(subsp), g in H |
+      assert3 forall{ <v,g> : v in Basis(subsp), g in H |
                        ((A!v)*(g))`elt @map eq (alg!(v@map)*(g@homg))`elt };
         
       subalgs`subsps cat:= [* subsp *];

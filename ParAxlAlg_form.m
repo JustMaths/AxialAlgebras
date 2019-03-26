@@ -101,7 +101,7 @@ intrinsic HasFrobeniusForm(A::ParAxlAlg) -> BoolElt, AlgMatElt, RngIntElt
   if Dimension(A) eq 0 then
     return false,_,0;
   end if;
-  G := MiyamotoGroup(A);
+  G := Group(A);
   W := A`W;
   
   Ax := A`GSet;
@@ -109,10 +109,10 @@ intrinsic HasFrobeniusForm(A::ParAxlAlg) -> BoolElt, AlgMatElt, RngIntElt
   orbs := Sort([ Sort(o) : o in Orbits(G, Ax)], func<x,y|x[1]-y[1]>);
   axes := Setseq(&join [ o@A`GSet_to_axes : o in orbs]);
   conjs := [ [ g where _, g := IsConjugate(G, Ax, o[1], o[j]) : j in [1..#o]] : o in orbs];
-
+  
   U := sub<W | axes>;
   // We build a basis
-  // These are a sequence of tuples <m, j, v>, where v is the element which is the jth element oin the mth level of prods.
+  // These are a sequence of tuples <m, j, v>, where v is the element which is the jth element in the mth level of prods.
   bas := [ < 1, i, axes[i] >: i in [1..#axes]];
   // We also maintain a list of products we have seen before
   // These are a list sequences of tuples.  The sequences are the number of axes multiplied together.  Each tuple is of the form <S, v>, where v is the answer and S is a list of lists of indexes of axes, representing the multiplication of those axes with brackets given by the lists (no list means no multiplication ie a single axis).

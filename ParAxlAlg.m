@@ -301,7 +301,7 @@ end intrinsic;
 
 intrinsic RestrictToMiyamotoGroup(A::ParAxlAlg) -> ParAxlAlg
   {
-  Return the algebrA where the group is restricted to the Miyamoto group.
+  Return the algebra where the group is restricted to the Miyamoto group.
   }
   if A`Miyamoto_group eq A`group then
     return A;
@@ -343,7 +343,7 @@ intrinsic RestrictToMiyamotoGroup(A::ParAxlAlg) -> ParAxlAlg
     idem := New(AxlAxis);
     idem`id := Anew!((A`axes[j]`id*g)`elt);
     assert i@Anew`GSet_to_axes eq idem`id`elt;
-    idem`stab := A`axes[j]`stab^g;
+    idem`stab := A`axes[j]`stab^g meet Miy;
     idem`inv := A`axes[j]`inv^g;
     idem`odd := AssociativeArray();
     idem`even := AssociativeArray();
@@ -520,7 +520,7 @@ end intrinsic;
 
 intrinsic 'eq'(x::ParAxlAlgElt, y::ParAxlAlgElt) -> BoolElt
   {
-  Returns whether x is in A.
+  Equality of elements.
   }
   require x`parent eq y`parent: "The two elements are not in the same partial axial algebra.";
   return x`elt eq y`elt;
@@ -544,7 +544,7 @@ end intrinsic;
 // maybe this should be a function?
 intrinsic CreateElement(A::ParAxlAlg, x::.) -> ParAxlAlgElt
   {
-  Creates a element.
+  Creates an element.
   }
   xx := New(ParAxlAlgElt);
   xx`parent := A;
@@ -590,6 +590,13 @@ intrinsic Eltseq(x::ParAxlAlgElt) -> SeqEnum
   Returns the sequence of coefficients of x`elt.
   }
   return Eltseq(x`elt);
+end intrinsic;
+
+intrinsic Vector(x::ParAxlAlgElt) -> ModTupFld
+  {
+  Returns the vector.
+  }
+  return x`elt;
 end intrinsic;
 
 intrinsic IsZero(x::ParAxlAlgElt) -> BoolElt

@@ -226,7 +226,7 @@ Returns the Jordan type fusion table.
 */
 intrinsic JordanFusionTable(eta) -> FusTab
   {
-  Returns the fusion table for the Monster.
+  Returns the Jordan type fusion law.
   }
   require eta notin {1,0}: "The parameter may not be 0, or 1.";
   T := New(FusTab);
