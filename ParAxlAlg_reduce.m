@@ -20,7 +20,7 @@ Check to see if Dim(V) = Dim(W) and if not goto (1) and repeat.
 There is a dimension limit where if W exceeds this then it won't be expanded further the procedure exits
 
 */
-intrinsic AxialReduce(A::ParAxlAlg: dimension_limit := 150, saves:=true, backtrack := false, reduction_limit:= func<A | Maximum(Floor(Dimension(A)/4), 50)>) -> ParAxlAlg, BoolElt
+intrinsic AxialReduce(A::ParAxlAlg: dimension_limit := 150, saves:=true, backtrack := false, stabiliser_action := true, reduction_limit:= func<A | Maximum(Floor(Dimension(A)/4), 50)>) -> ParAxlAlg, BoolElt
   {
   Performs ExpandEven and ExpandSpace repeatedly until either we have completed, or the dimension limit has been reached.
   }
@@ -31,7 +31,7 @@ intrinsic AxialReduce(A::ParAxlAlg: dimension_limit := 150, saves:=true, backtra
   while Dimension(A) ne Dimension(A`V) and Dimension(A) le dimension_limit do
   
     // First we expand
-    AA, phi := ExpandSpace(A: implement:= false);
+    AA, phi := ExpandSpace(A: implement:= false, stabiliser_action := stabiliser_action);
     
     // If we are backtracking and there is some intersection then form a new A and continue
     if backtrack and Dimension(sub<AA`W | AA`rels> meet AA`V) ne 0 then
@@ -480,7 +480,7 @@ ijpos := function(i,j,n)
   end if;
 end function;
 
-intrinsic ExpandSpace(A::ParAxlAlg: implement := true) -> ParAxlAlg, Map
+intrinsic ExpandSpace(A::ParAxlAlg: implement := true, stabiliser_action := true) -> ParAxlAlg, Map
   {
   Let A = V \oplus C.  This function expands A to S^2(C) \oplus (V \otimes C) \oplus A, with the new V being the old A.  We then factor out by the known multiplications in old V and return the new partial axial algebra.
   }
@@ -584,7 +584,7 @@ intrinsic ExpandSpace(A::ParAxlAlg: implement := true) -> ParAxlAlg, Map
   UpdateAxes(A, ~Anew, WtoWnew: matrix:=WtoWnew_mat);
   vprintf ParAxlAlg, 4: "  Time taken for updating the axes %o.\n", Cputime(tt);
   
-  vprint ParAxlAlg, 2: "  Updating the odd and even parts and doing the w*h-w trick.";
+  vprint ParAxlAlg, 2: "  Updating the odd and even parts.";
   tt := Cputime();
   // We now build the odd and even parts and do w*h-w
     
@@ -670,56 +670,59 @@ intrinsic ExpandSpace(A::ParAxlAlg: implement := true) -> ParAxlAlg, Map
 
     Anew`axes[i]`odd[odds] := sub<Wnew | odd>;
 
-    // We do the w*h-w trick
-    H := A`axes[i]`stab;
-    Aactionhom := GModuleAction(A`Wmod);
-        
-    // precompute the images of all the basis vectors in the basis of bas
-    Mbas := Matrix(bas);
-    Minv := Mbas^-1;
-    images := [ Mbas*h@Aactionhom*Minv : h in H | h ne H!1];
+    if stabiliser_action then
+      vprint ParAxlAlg, 2: "  Doing the w*h-w trick.";
+      // We do the w*h-w trick
+      H := A`axes[i]`stab;
+      Aactionhom := GModuleAction(A`Wmod);
+          
+      // precompute the images of all the basis vectors in the basis of bas
+      Mbas := Matrix(bas);
+      Minv := Mbas^-1;
+      images := [ Mbas*h@Aactionhom*Minv : h in H | h ne H!1];
 
-    // All the vectors from W_even have already had the w*h-w trick imposed, so don't need to do these.  We only need to do those given by even_pairs.
+      // All the vectors from W_even have already had the w*h-w trick imposed, so don't need to do these.  We only need to do those given by even_pairs.
 
-    // If w^h = w^g for some h and g, we only need to take one.  Also, since multipication is commutative, we may take any order on the pair which give w.
+      // If w^h = w^g for some h and g, we only need to take one.  Also, since multipication is commutative, we may take any order on the pair which give w.
 
-    function CommonRows(t)
-      return Setseq({Sort([L[t[1]], L[t[2]]]) : L in images });
-    end function;
+      function CommonRows(t)
+        return Setseq({Sort([L[t[1]], L[t[2]]]) : L in images });
+      end function;
 
-    // We build all pairs and sort them so that they are in blocks with common 1st vector.
-    image_pairs := [ CommonRows(t) : t in even_pairs ];
-    lens := [#S : S in image_pairs];
+      // We build all pairs and sort them so that they are in blocks with common 1st vector.
+      image_pairs := [ CommonRows(t) : t in even_pairs ];
+      lens := [#S : S in image_pairs];
 
-    image_pairs := &cat image_pairs;
-    Sort(~image_pairs, func<x,y| x[1] eq y[1] select 0 else x[1] lt y[1] select 1 else -1>, ~perm);
+      image_pairs := &cat image_pairs;
+      Sort(~image_pairs, func<x,y| x[1] eq y[1] select 0 else x[1] lt y[1] select 1 else -1>, ~perm);
 
-    // We maintain the order on the w's
-    ws := &cat [ [ basmult[t[1],t[2]] where t := even_pairs[k] : j in [1..lens[k]]] : k in [1..#even_pairs]];
-    ws := [ws[i^perm] : i in [1..#ws]];
-    
-    vprintf ParAxlAlg, 4: "There are %o pairs to process.\n", #ws;
-    
-    if #ws lt 10000 then
-      // We just do the easy thing
-      whs := [ &+[ L[1,j]*L[2,k]*basmult[j, k] : j in Support(L[1]), k in Support(L[2]) ] : L in image_pairs];
-    else
-      // We take blocks of all the same first vector and use matrix multiplication
-      // This is slower for small numbers but quicker for more.
-      // Slower for 8000 pairs (S_6 dim 151), but quicker for 47000 pairs (S_6 dim 9797)
+      // We maintain the order on the w's
+      ws := &cat [ [ basmult[t[1],t[2]] where t := even_pairs[k] : j in [1..lens[k]]] : k in [1..#even_pairs]];
+      ws := [ws[i^perm] : i in [1..#ws]];
+      
+      vprintf ParAxlAlg, 4: "    There are %o pairs to process.\n", #ws;
+      
+      if #ws lt 10000 then
+        // We just do the easy thing
+        whs := [ &+[ L[1,j]*L[2,k]*basmult[j, k] : j in Support(L[1]), k in Support(L[2]) ] : L in image_pairs];
+      else
+        // We take blocks of all the same first vector and use matrix multiplication
+        // This is slower for small numbers but quicker for more.
+        // Slower for 8000 pairs (S_6 dim 151), but quicker for 47000 pairs (S_6 dim 9797)
 
-      whs := [];
-      start := 1;
-      time while exists(last){j-1 : j in [start..#image_pairs] | image_pairs[start,1] ne image_pairs[j,1]} do
+        whs := [];
+        start := 1;
+        time while exists(last){j-1 : j in [start..#image_pairs] | image_pairs[start,1] ne image_pairs[j,1]} do
+          whs cat:= Flat(BulkMultiply(basmult, [image_pairs[start,1]],
+                    [image_pairs[j,2] : j in [start..last]]));
+          start := last + 1;
+        end while;
         whs cat:= Flat(BulkMultiply(basmult, [image_pairs[start,1]],
-                  [image_pairs[j,2] : j in [start..last]]));
-        start := last + 1;
-      end while;
-      whs cat:= Flat(BulkMultiply(basmult, [image_pairs[start,1]],
-                  [image_pairs[j,2] : j in [start..#image_pairs]]));
+                    [image_pairs[j,2] : j in [start..#image_pairs]]));
+      end if;
+      
+      Anew`axes[i]`even[evens diff {1}] +:= sub<Wnew | [ whs[j]-ws[j] : j in [1..#ws]]>;
     end if;
-    
-    Anew`axes[i]`even[evens diff {1}] +:= sub<Wnew | [ whs[j]-ws[j] : j in [1..#ws]]>;
   end for;
   vprintf ParAxlAlg, 4: "  Time taken for the odd and even parts %o.\n", Cputime(tt);
 

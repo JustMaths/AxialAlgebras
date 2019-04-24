@@ -637,7 +637,7 @@ intrinsic '*'(al::RngElt, x::ParAxlAlgElt) -> ParAxlAlgElt
   {
   Returns the product of al and x.
   }
-  require al in BaseRing(Parent(x)`W): "The scalar given in not in the base ring of the algebra.";
+  require al in BaseRing(Parent(x)`W): "The scalar given is not in the base ring of the algebra.";
   return CreateElement(Parent(x), al*x`elt);
 end intrinsic;
 
@@ -646,6 +646,14 @@ intrinsic '*'(x::ParAxlAlgElt, al::RngElt) -> ParAxlAlgElt
   "
   }
   return al*x;
+end intrinsic;
+
+intrinsic '/'(x::ParAxlAlgElt, al::RngElt) -> ParAxlAlgElt
+  {
+  Returns x divided by al.
+  }
+  require al in BaseRing(Parent(x)`W): "The scalar given is not in the base ring of the algebra.";
+  return CreateElement(Parent(x), (1/al)*x`elt);
 end intrinsic;
 
 intrinsic '*'(x::ParAxlAlgElt, y::ParAxlAlgElt) -> ParAxlAlgElt
@@ -663,7 +671,7 @@ end intrinsic;
 
 intrinsic '*'(x::ParAxlAlgElt, g::GrpPermElt) -> ParAxlAlgElt
   {
-  Returns the iamge of x under the action of G.
+  Returns the image of x under the action of G.
   }
   A := Parent(x);
   require g in Group(A`Wmod): "g is not a member of the group which acts on the partial axial algebra which contains x.";
