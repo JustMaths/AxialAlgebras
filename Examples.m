@@ -27,21 +27,17 @@ A:=PartialAxialAlgebra(shapes[1]);
 // A := AxialReduce(A);
 
 // Or we can run each bit individually:
-// We begin by doing a first expansion which expands the partial algebra by enough so that the subalgebras which are glued in are glued via isomorphisms
+// We begin by expanding the partial algebra
 
-A := SubalgebraExpand(A);
+A := ExpandSpace(A);
+
+// This has also finds relations coming from the odd part.
 
 // Next we can try to expand the even part:
 
 A := ExpandEven(A);
 
-// Or the odd part
-
-A := ExpandOdd(A);
-
-// If neither of these produce any further reduction, then we need to expand our algebra
-
-A := ExpandSpace(A);
+// If neither of these produce any further reduction, then we need to expand our algebra again
 
 // There are also handy functions for seeing where we have got to with our reduction:
 
