@@ -3,7 +3,10 @@
 Some functions for checking properties of partial axial algebras
 
 */
-function PrintSort(x,y)
+// Sorts algebras by GroupName, axes and shape
+function PrintSort(X,Y)
+  x := [GroupName(MiyamotoGroup(X)), Join([ Sprintf("%o", #o) : o in Orbits(MiyamotoGroup(X), X`GSet)], "+"), &cat[sh[2] : sh in X`shape]];
+  y := [GroupName(MiyamotoGroup(Y)), Join([ Sprintf("%o", #o) : o in Orbits(MiyamotoGroup(Y), Y`GSet)], "+"), &cat[sh[2] : sh in Y`shape]];
   if x[1] lt y[1] then
     return -1;
   elif x[1] gt y[1] then
@@ -25,14 +28,15 @@ function PrintSort(x,y)
   end if;
 end function;
 
-intrinsic PrintProperties(algs::SeqEnum, filename::MonStgElt: long := false, header := true, shortshape:=true, zerodim:=true)
+intrinsic PrintProperties(algs::SeqEnum, filename::MonStgElt: long := false, header := true, no_6A5A:=true, shortshape:=true, zerodim:=true)
   {
-  Prints in latex format to the filename the properties of the algebras in algs.  Short version is G, axes, shape, dim, m, form.  Long adds positive def/semidef, primitive, 2Ab, 3A, 4A, 5A.  zerodim toggles if the 0-dimensional algebras are printed.
+  Prints in latex format to the filename the properties of the algebras in algs.  Short version is G, axes, shape, dim, m, form.  Long adds primitive, 2Ab, 3A, 4A, 5A.  zerodim toggles if the 0-dimensional algebras are printed. shortshape writes the shape with multiplicites and no_6A5A supresses printing 6A or 5A algebras.
   }
   its := func< x | IntegerToString(x)>;
   BoolToYN := func< v | v select "yes" else "no">;
 
-  str := [];  
+  Sort(~algs, PrintSort);
+  str := [];
   for i in [1..#algs] do
     A := algs[i];
     
@@ -41,17 +45,22 @@ intrinsic PrintProperties(algs::SeqEnum, filename::MonStgElt: long := false, hea
       continue;
     end if;
     
-    num_axes := &cat [ Sprintf("%o+", #o) : o in Orbits(Group(A`GSet), A`GSet)];
-    num_axes := num_axes[1..#num_axes-1];
-
+    num_axes := Join([ Sprintf("%o", #o) : o in Orbits(MiyamotoGroup(A), A`GSet)], "+");
+    
     if shortshape then
-      shapetype := &cat [ sh[2] : sh in A`shape | sh[2] notin {"6A", "5A"}];
-      if Type(shapetype) eq SeqEnum then
-        assert shapetype eq [];
-        shapetype := &cat [ sh[2] : sh in A`shape];
+      shape_mults := {* sh[2] : sh in A`shape *};
+      shape_set := {@ sh[2] : sh in A`shape @};
+
+      // Realy we want to remove the 4Bs in the same orbit as the 6As too, but this is too much work...
+      if no_6A5A and shape_set diff {@ "6A", "5A" @} ne {@@} then
+        // if you try to use diff, it reorders!
+        shape_set := {@ sh : sh in shape_set | sh notin {"6A", "5A"} @};
       end if;
+      shapetype := "$" cat Join([ (mult gt 1 select "(" else "") cat sh cat 
+                                  (mult gt 1 select Sprintf(")^{%o}", mult) else "") 
+                             where mult := Multiplicity(shape_mults, sh) : sh in shape_set], " \\, ") cat "$";
     else
-      shapetype := &cat [ sh[2] : sh in A`shape];
+      shapetype := "$" cat &cat [ sh[2] : sh in A`shape] cat "$";
     end if;
 
     line := [ "$" cat GroupName(MiyamotoGroup(A):TeX:=true) cat "$", num_axes, shapetype ];
@@ -61,17 +70,17 @@ intrinsic PrintProperties(algs::SeqEnum, filename::MonStgElt: long := false, hea
       line cat:= [ "?", "", ""];
     else
       prop := Properties(A);
-      line cat:= [ its(Dimension(A)), its(prop[5]), BoolToYN(prop[2])];
+      line cat:= [ its(Dimension(A)), its(prop[5]), prop[3] select "pos" else prop[4] select "semi" else "no"];
     end if;
     
     if long then
       if Dimension(A) eq 0 then
-        line cat:= [ "-" : j in [1..6]];
+        line cat:= [ "-" : j in [1..5]];
       elif Dimension(A) ne Dimension(A`V) then
-        line cat:= [ "" : j in [1..6]];
+        line cat:= [ "" : j in [1..5]];
       else
-        line cat:= [ prop[3] select "pos" else prop[4] select "semi" else "no",
-              BoolToYN(prop[1]) ];
+        // primitive
+        line cat:= [ BoolToYN(prop[1]) ];
         conds := prop[6];
         for cond in ["2Ab", "3A", "4A", "5A"] do
           so := exists(j){ j : j in [1..#conds] | conds[j,1] eq cond};
@@ -85,7 +94,6 @@ intrinsic PrintProperties(algs::SeqEnum, filename::MonStgElt: long := false, hea
   end for;
   
   if #str ne 0 then
-    Sort(~str, PrintSort);
     text := Join([ Join(line, " & ") : line in str], "\\\\\n");
   else
     text := "";
@@ -95,14 +103,13 @@ intrinsic PrintProperties(algs::SeqEnum, filename::MonStgElt: long := false, hea
     if not long then
       text := "\\begin{longtable}{cccccc}\n$G$ & axes & shape & dim & $m$ & form\\\\\n\\hline\n" cat text cat "\n\\hline\n\\end{longtable}";
     else
-      text := "\\begin{longtable}{cccccccccccc}\n$G$ & axes & shape & dim & $m$ & form & definiteness & primitive & 2Ab & 3A & 4A & 5A \\\\\n\\hline\n" 
+      text := "\\begin{longtable}{ccccccccccc}\n$G$ & axes & shape & dim & $m$ & form & primitive & 2Ab & 3A & 4A & 5A \\\\\n\\hline\n" 
          cat text cat "\\\\\n\\hline\n\\end{longtable}";
     end if;
   end if;
   
   Write(filename, text);
 end intrinsic;
-
 
 intrinsic CheckAllGroup(grp_name::MonStgElt) -> List
   {

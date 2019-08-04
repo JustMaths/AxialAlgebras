@@ -20,7 +20,7 @@ Check to see if Dim(V) = Dim(W) and if not goto (1) and repeat.
 There is a dimension limit where if W exceeds this then it won't be expanded further the procedure exits
 
 */
-intrinsic AxialReduce(A::ParAxlAlg: dimension_limit := 150, saves:=true, backtrack := false, stabiliser_action := true, reduction_limit:= func<A | Maximum(Floor(Dimension(A)/4), 50)>) -> ParAxlAlg, BoolElt
+intrinsic AxialReduce(A::ParAxlAlg: dimension_limit := 150, backtrack := false, stabiliser_action := true, reduction_limit:= func<A | Maximum(Floor(Dimension(A)/4), 50)>) -> ParAxlAlg, BoolElt
   {
   Performs ExpandEven and ExpandSpace repeatedly until either we have completed, or the dimension limit has been reached.
   }
@@ -91,7 +91,7 @@ end intrinsic;
 We provide a function to do all shapes for a given group
 
 */
-intrinsic ShapeReduce(G::Grp: dimension_limit := 150, saves:=true, starting_position := 1, fusion_table := MonsterFusionTable(), maximal_subgroups:=true, field:= Rationals()) -> SeqEnum
+intrinsic ShapeReduce(G::Grp: saves:=true, starting_position := 1, fusion_table := MonsterFusionTable(), field := Rationals(), subgroups := "maximal", partial := false, shape_stabiliser := true, dimension_limit := 150, backtrack := false, stabiliser_action := true, reduction_limit:= func<A | Maximum(Floor(Dimension(A)/4), 50)>) -> SeqEnum
   {
   Given a group G, find all the shapes, build the partial algebras and reduce.
   }
@@ -102,9 +102,9 @@ intrinsic ShapeReduce(G::Grp: dimension_limit := 150, saves:=true, starting_posi
   for i in [starting_position..#shapes] do
     vprintf ParAxlAlg, 1: "Beginning shape %o of %o.\n", i, #shapes;
     vprintf ParAxlAlg, 1: "Partial algebra has %o axes of shape %o.\n", #shapes[i,1], shapes[i,3];
-    A := PartialAxialAlgebra(shapes[i]: fusion_table:=fusion_table, maximal_subgroups:=maximal_subgroups, field:=field);
+    A := PartialAxialAlgebra(shapes[i]: fusion_table:=fusion_table, field:=field, subgroups:=subgroups, partial:=partial, shape_stabiliser:=shape_stabiliser);
     t := Cputime();
-    A := AxialReduce(A: dimension_limit := dimension_limit);
+    A := AxialReduce(A: dimension_limit:=dimension_limit, backtrack:=backtrack, stabiliser_action:=stabiliser_action, reduction_limit:=reduction_limit);
     Append(~output, A);
     vprintf ParAxlAlg, 4: "\nTime taken for complete reduction %o.\n\n", Cputime(t);
     if saves then

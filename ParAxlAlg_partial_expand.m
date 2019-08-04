@@ -3,7 +3,7 @@
 Search partial expansions for useful expansions and pull back the relations/eigenvectors
 
 */
-intrinsic SearchPartialExpansions(A::ParAxlAlg) -> ParAxlAlg
+intrinsic SearchPartialExpansions(A::ParAxlAlg: stabiliser_action := true) -> ParAxlAlg
   {
   Decomposes the complement of V in A using the MeatAxe.  For each indecomposible summand U, partially expand A by U, finds relations and eigenvectors in the resulting algebra and pull them back to A, if possible.
   }
@@ -25,7 +25,7 @@ intrinsic SearchPartialExpansions(A::ParAxlAlg) -> ParAxlAlg
   while #mods ne 0 do
     U := mods[1];
     print U;
-    Apar, phi := PartialExpandSpace(A, sub<A`W| [A`W!A`Wmod!u : u in Basis(U)]>);
+    Apar, phi := PartialExpandSpace(A, sub<A`W| [A`W!A`Wmod!u : u in Basis(U)]>: stabiliser_action := stabiliser_action);
 
     IndentPush(2);
     Apar := ExpandEven(Apar: implement := false);
@@ -97,7 +97,7 @@ end function;
 Partial expand by U
 
 */
-intrinsic PartialExpandSpace(A::ParAxlAlg, U::ModTupFld) -> ParAxlAlg, Map
+intrinsic PartialExpandSpace(A::ParAxlAlg, U::ModTupFld: stabiliser_action := true) -> ParAxlAlg, Map
   {
   Given a subspace U of W, we expand A to a partial axial algebra where we include all products in U.
   }
@@ -239,7 +239,7 @@ intrinsic PartialExpandSpace(A::ParAxlAlg, U::ModTupFld) -> ParAxlAlg, Map
   UpdateAxes(A, ~Anew, WtoWnew: matrix:=WtoWnew_mat);
   vprintf ParAxlAlg, 4: "  Time taken for updating the axes %o.\n", Cputime(tt);
 
-  vprint ParAxlAlg, 2: "  Updating the odd and even parts and doing the w*h-w trick.";
+  vprint ParAxlAlg, 2: "  Updating the odd and even parts.";
   tt := Cputime();
   // We now build the odd and even parts and do w*h-w
     
@@ -261,25 +261,28 @@ intrinsic PartialExpandSpace(A::ParAxlAlg, U::ModTupFld) -> ParAxlAlg, Map
     EvenxOdd := BulkMultiplyAtoAnew(bas_even, bas_odd);
     Anew`axes[i]`odd[odds] +:= sub<Wnew | &cat EvenxOdd>;
     
-    // We do the w*h-w trick
-    H := A`axes[i]`stab;
-    Aactionhom := GModuleAction(A`Wmod);
-    
-    // precompute the images of all the basis vectors
-    images := [ FastMatrix(bas_even cat bas_odd,h@Aactionhom) : h in H | h ne H!1];
-    
-    // We now need to convert these images and find their products in Anew.
-    im_even := [ [Coordinates(VX meet A`axes[i]`even[evens], v) : v in L[1..#bas_even]] : L in images];
-    im_odd := [ [Coordinates(VX meet A`axes[i]`odd[odds], v) : v in L[#bas_even+1..#bas_even+#bas_odd]] : L in images];
-    
-    prods_even := [ BulkMultiply(EvenxEven, L, L) : L in im_even];
-    prods_odd := [ BulkMultiply(OddxOdd, L, L) : L in im_odd];
-    
-    // Each w in Anew`even is represented by a tuple <u,v> and we have precomputed their products and also u*h, so we just run over k,j symmetrically
-    vects_even := [ [ M[k,j] - EvenxEven[k,j] :j in [1..k], k in [1..#bas_even]] : M in prods_even];
-    vects_odd := [ [ M[k,j] - OddxOdd[k,j] :j in [1..k], k in [1..#bas_odd]] : M in prods_odd];
-    
-    Anew`axes[i]`even[evens diff {1}] +:= sub<Wnew | Flat(vects_even) cat Flat(vects_odd)>;
+    if stabiliser_action then
+      vprint ParAxlAlg, 2: "  Doing the w*h-w trick.";
+      // We do the w*h-w trick
+      H := A`axes[i]`stab;
+      Aactionhom := GModuleAction(A`Wmod);
+      
+      // precompute the images of all the basis vectors
+      images := [ FastMatrix(bas_even cat bas_odd,h@Aactionhom) : h in H | h ne H!1];
+      
+      // We now need to convert these images and find their products in Anew.
+      im_even := [ [Coordinates(VX meet A`axes[i]`even[evens], v) : v in L[1..#bas_even]] : L in images];
+      im_odd := [ [Coordinates(VX meet A`axes[i]`odd[odds], v) : v in L[#bas_even+1..#bas_even+#bas_odd]] : L in images];
+      
+      prods_even := [ BulkMultiply(EvenxEven, L, L) : L in im_even];
+      prods_odd := [ BulkMultiply(OddxOdd, L, L) : L in im_odd];
+      
+      // Each w in Anew`even is represented by a tuple <u,v> and we have precomputed their products and also u*h, so we just run over k,j symmetrically
+      vects_even := [ [ M[k,j] - EvenxEven[k,j] :j in [1..k], k in [1..#bas_even]] : M in prods_even];
+      vects_odd := [ [ M[k,j] - OddxOdd[k,j] :j in [1..k], k in [1..#bas_odd]] : M in prods_odd];
+      
+      Anew`axes[i]`even[evens diff {1}] +:= sub<Wnew | Flat(vects_even) cat Flat(vects_odd)>;
+    end if;
   end for;
   vprintf ParAxlAlg, 4: "  Time taken for the odd and even parts %o.\n", Cputime(tt);
 
