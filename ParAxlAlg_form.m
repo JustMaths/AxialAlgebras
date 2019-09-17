@@ -187,7 +187,8 @@ intrinsic HasFrobeniusForm(A::ParAxlAlg) -> BoolElt, AlgMatElt, RngIntElt
   evens := [ {@ s @} : s in Sort(evens, EigenvalueSort)];
   odds := [ {@ s @} : s in Sort(odds, EigenvalueSort)];
   actionhom := GModuleAction(A`Wmod);
-  Axbas := [ &cat[ Basis(A`axes[i]`even[k]) : k in evens] cat &cat[ Basis(A`axes[i]`odd[k]): k in odds] : i in [1..#A`axes] ];
+  Axbas := [ &cat[ k[1] eq 1 select ExtendBasis([A`axes[i]`id`elt], A`axes[i]`even[k]) else Basis(A`axes[i]`even[k]) : k in evens]
+         cat &cat[ Basis(A`axes[i]`odd[k]): k in odds] : i in [1..#A`axes] ];
   Axbas := [ RSpaceWithBasis(FastMatrix(Axbas[i], g@actionhom)) : g in conjs[i], i in [1..#Axbas]];
 
   form := [[] : i in [1..#bas]];
