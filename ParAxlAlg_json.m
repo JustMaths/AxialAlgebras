@@ -553,7 +553,10 @@ intrinsic PartialAxialAlgebra(alg::Assoc) -> ParAxlAlg
     return A;
   end if;
   
-  if Type(alg["mult"][1]) eq Assoc then
+  if #alg["mult"] eq 0 then
+    // We are loading an algebra with no multiplication yet known
+    A`mult := [];
+  elif Type(alg["mult"][1]) eq Assoc then
     A`mult := [ Rows(Matrix(SparseMatrix(F, S))) : S in alg["mult"]];
   else
     A`mult := [ [ A`W!Numbers(row): row in mat ]: mat in alg["mult"]];
