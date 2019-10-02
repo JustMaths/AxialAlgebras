@@ -486,14 +486,14 @@ end intrinsic;
 
 intrinsic Basis(A::ParAxlAlg) -> SeqEnum
   {
-  Basis of the A.
+  Basis of the partial algebra.
   }
   return [ CreateElement(A, v) : v in Basis(A`W)];
 end intrinsic;
 
 intrinsic '.'(A::ParAxlAlg, i::RngIntElt) -> ParAxlAlgElt
   {
-  Basis of the A.
+  The ith basis element of the partial algebra.
   }
   bas := Basis(A);
   require i gt 0 and i le #bas: "Argument 2 (", i, ") should be in the range", [1..#bas];
@@ -671,7 +671,7 @@ end intrinsic;
 
 intrinsic '*'(x::ParAxlAlgElt, g::GrpPermElt) -> ParAxlAlgElt
   {
-  Returns the image of x under the action of G.
+  The image of x under the action of g.
   }
   A := Parent(x);
   require g in Group(A`Wmod): "g is not a member of the group which acts on the partial axial algebra which contains x.";

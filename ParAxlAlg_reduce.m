@@ -152,7 +152,7 @@ intrinsic SaturateSubspace(A::ParAxlAlg, U::ModTupRng: starting := sub<A`W|>) ->
     // We only do products of V with the new vectors found in D
     bas_new := ExtendBasis(Dmod_old, Dmod_new)[Dimension(Dmod_old)+1..Dimension(Dmod_new)];
     
-    bas_new := [ W | W!(Wmod!u) : u in bas_new];
+    bas_new := [ W | W!Vector(Wmod!u) : u in bas_new];
     
     S := IndexedSet(&cat BulkMultiply(A, bas_new, Basis(V)));
     
@@ -276,10 +276,11 @@ intrinsic ReduceSaturated(A::ParAxlAlg, U::ModTupFld) -> ParAxlAlg, Map
   // We have grown U as much as possible, so now we form the quotient
   tt := Cputime();
 
-  Wnew, psi := quo<W | U>;
   Anew`Wmod, psi_mod := quo<Wmod | [Wmod | Wmod! u : u in Basis(U)] >;
-  psi_mat := MapToMatrix(psi_mod);
-  assert Dimension(Wnew) eq Dimension(Anew`Wmod);
+  Wnew := VectorSpace(Anew`Wmod);
+  psi_mat := Matrix(psi_mod);
+  psi := hom< W -> Wnew | psi_mat >;
+
   Anew`W := Wnew;
   Anew`V := V @ psi;
   
@@ -327,7 +328,7 @@ intrinsic ReduceSaturated(A::ParAxlAlg, U::ModTupFld) -> ParAxlAlg, Map
   
   vprint ParAxlAlg, 2: "  Mapping the remaining relations into the new W.";
   tt := Cputime();
-    Anew`rels := {@ v : v in FastMatrix(A`rels, psi_mat) | v ne Wnew!0 @};
+  Anew`rels := {@ v : v in FastMatrix(A`rels, psi_mat) | v ne Wnew!0 @};
   vprintf ParAxlAlg, 4: "  Time taken %o\n", Cputime(tt);
   
   vprintf ParAxlAlg, 4: "Time taken for ReduceSaturated %o\n", Cputime(t);

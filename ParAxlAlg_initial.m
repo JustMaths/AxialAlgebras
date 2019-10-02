@@ -330,6 +330,43 @@ intrinsic GInvariantSubspace(WH::ModGrp, W::ModTupFld, S::.) -> ModTupFld
   end if;
   return UU;
 end intrinsic;
+
+// Tests seem to show this is slower for A6 at about 4000 dim
+intrinsic InduceGInvariantSubspace(Wmod::ModGrp, W::ModTupFld, S::., H::Grp) -> ModTupFld
+  {
+  Given a collection S which is invariant under the action of the group H, induce to a submodule of Wmod, where H \leq Group(Wmod), and return as a subspace of W.
+  }
+  t := Cputime();
+  require Type(S) in {SetIndx, SetEnum, SeqEnum}: "The given elements are not in a set or sequence.";
+  if #S eq 0 then
+    return sub<W|>;
+  end if;
+
+  // Dedupe S and make it a sequence
+  time SS := Setseq(Set(S));
+
+  if Type(Universe(SS)) eq ParAxlAlg then
+    SS := Matrix([ s`elt : s in SS ]);
+  elif ISA(Type(Universe(SS)), {ModTupFld, ModGrp}) then
+    SS := Matrix(SS);
+  else
+    error "S is not a set of vectors or partial axial algebra elements.";
+  end if;
+  
+  time SS := EchelonForm(SS);
+  
+  trans := Transversal(Group(Wmod), H);
+  time actionhom := GModuleAction(Wmod);
+  
+  time newvects := [ SS*(g@actionhom) : g in trans];
+  
+  time U := sub<W | Flat([Rows(M) : M in newvects])>;
+  
+  if Cputime(t) ge 1 then
+    vprintf ParAxlAlg, 4: "Time taken for InduceGInvariantSubspace is %o.  Starting number of objects %o, ending dim %o.\n", Cputime(t), #S, Dimension(U);
+  end if;
+  return U;
+end intrinsic;
 //
 // ================ UPDATE A PARTIAL AXIAL ALGEBRA ================
 //

@@ -13,12 +13,21 @@ intrinsic MyGroupName(G::GrpPerm) -> MonStgElt
   {
   If GroupName is defined in magma (roughly version 2.21 or above) it returns GroupName, otherwise it returns order_num, where <order, num> is given by IdentifyGroup. A hash is used in place of a colon.
   }
+  // By doing IdentifyGroup and then SmallGroup, we get a canonical iso rep for G
+  // Can only do for group orders up to 1024
   try
-    name := eval("GroupName(G)");
+    ord, num := Explode(IdentifyGroup(G));
+    GG := SmallGroup(ord, num);
+  catch e
+    GG := G;
+  end try;
+
+  try
+    name := eval("GroupName(GG)");
     // magma/linux/something messes up directory names with colons, so need to substitute these...
     name := Join(Split(name, ":"), "#");
   catch e
-    ord, num := Explode(IdentifyGroup(G));
+  ord, num := Explode(IdentifyGroup(G));
     name := Sprintf("%o_%o", ord, num);
   end try;
   return name;
