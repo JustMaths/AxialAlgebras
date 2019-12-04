@@ -167,6 +167,10 @@ filename = sys.argv[1]
 print \"/\".join(os.listdir(filename))
 ";
 
+// Added to fix weird problem with the script not running properly on some machines
+// ASCI char 13 (not \r in magma!) is ignored on some computers and causes an error on others.
+ls_script := &cat Split(ls_script, CodeToString(13));
+
 intrinsic ls(dirname::MonStgElt) -> SeqEnum
   {
   ls
@@ -184,6 +188,10 @@ filename = sys.argv[1]
 print os.stat(filename).st_size
 ";
 
+// Added to fix weird problem with the script not running properly on some machines
+// ASCI char 13 (not \r in magma!) is ignored on some computers and causes an error on others.
+size_script := &cat Split(size_script, CodeToString(13));
+
 intrinsic Size(filename::MonStgElt) -> RngIntElt
   {
   Gets the file size.
@@ -200,6 +208,10 @@ filename = sys.argv[1]
 
 print os.path.isdir(filename)
 ";
+
+// Added to fix weird problem with the script not running properly on some machines
+// ASCI char 13 (not \r in magma!) is ignored on some computers and causes an error on others.
+exists_script := &cat Split(exists_script, CodeToString(13));
 
 intrinsic ExistsPath(dirname::MonStgElt) -> BoolElt
   {
