@@ -583,7 +583,7 @@ intrinsic RestrictShape(Ax::GSet, tau::Map, shape::SeqEnum, axes::SetIndx : K :=
       // If the size of the largest subalgebra is 6, we need to record 4s and 6s.
       // Otherwise, we just need to record the ones with size equal to the largest.
       // in all cases this means recording all 4s, 5s, and 6s or the first in the rep (if it is a 2, or 3 then it is either the only one in the rep, or is contained in something larger).
-      // Since components from the larger algebra may split but not join, a defining subalgebra in the larger algebra must either be defining in the smaller algebra, or not intersect at all.  So when identifying which subalgebras from the larger algebra are seen in the smaller, we need only consdier the defining subalgebras of the smaller algebra.
+      // Since components from the larger algebra may split but not join, a defining subalgebra in the larger algebra must either be defining in the smaller algebra, or not intersect at all.  So when identifying which subalgebras from the larger algebra are seen in the smaller, we need only consider the defining subalgebras of the smaller algebra.
       
       if not (#o ge 4 or #o eq #rep[1]) then
         continue rep;

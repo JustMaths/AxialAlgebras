@@ -203,6 +203,17 @@ intrinsic ReduceSaturated(A::ParAxlAlg, U::ModTupFld) -> ParAxlAlg, Map
   Anew`group := A`group;
   Anew`Miyamoto_group := A`Miyamoto_group;
 
+  if Dimension(U) eq Dimension(A) then
+    Wnew, psi := quo<W | W>;
+    Anew`W := Wnew;
+    Anew`Wmod := quo<Wmod | Wmod >;
+    Anew`V := V @ psi;
+    Anew`GSet_to_axes := map<Anew`GSet -> Wnew | [<i, Wnew!0> : i in Anew`GSet]>;
+    
+    vprintf ParAxlAlg, 4: "Time taken for ReduceSaturated %o\n", Cputime(t);
+    return Anew, psi;
+  end if;
+
   // We must check whether the we are quotienting out anything in the subalgebras
   // If so, then we form the subalgebra quotients, pull back any relations and add them to U
 
@@ -588,7 +599,7 @@ intrinsic ExpandSpace(A::ParAxlAlg: implement := true, stabiliser_action := true
   vprint ParAxlAlg, 2: "  Updating the odd and even parts.";
   tt := Cputime();
   // We now build the odd and even parts and do w*h-w
-    
+  
   max_size := Max([#S : S in Keys(A`axes[1]`even)]);
   assert exists(evens){S : S in Keys(A`axes[1]`even) | #S eq max_size};
   max_size := Max([#S : S in Keys(A`axes[1]`odd)]);
