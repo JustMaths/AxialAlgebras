@@ -1,6 +1,10 @@
 # AxialAlgebras
 
-This is a magma package for constructing axial algebra with a given Miyamoto group.  It implements the algorithm described in the paper "An expansion algorithm for constructing axial algebras" (https://arxiv.org/abs/1804.00587) by J. McInroy and S. Shpectorov.
+This is a magma package for constructing axial algebra with a given Miyamoto group.  It implements the algorithm described in the paper
+
+J. McInroy and S. Shpectorov, An expansion algorithm for constructing axial algebras, J. Algebra, 550 (2020), 379-409.
+
+(https://www.sciencedirect.com/science/article/abs/pii/S0021869320300259?via%3Dihub)
 
 ## Getting started
 
