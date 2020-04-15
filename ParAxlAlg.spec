@@ -1,4 +1,12 @@
 {
+  MagmaJson
+  {
+    +json_and_utilities.spec
+  }
+  DecomposedGModules
+  {
+    +GModDec.spec
+  }
   ParAxlAlg.m
   ParAxlAlg_shape.m
   ParAxlAlg_initial.m
@@ -6,8 +14,6 @@
   ParAxlAlg_form.m
   ParAxlAlg_partial_expand.m
   FusionTable.m
-  json.m
   ParAxlAlg_json.m
   Properties.m
-  GModDec.m
 }
