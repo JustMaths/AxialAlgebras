@@ -1,0 +1,8 @@
+[submodule "MagmaJson"]
+	path = MagmaJson
+	url = https://github.com/JustMaths/MagmaJson
+	branch = master
+[submodule "DecomposedGModules"]
+	path = DecomposedGModules
+	url = https://github.com/JustMaths/DecomposedGModules
+	branch = development
