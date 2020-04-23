@@ -8,14 +8,15 @@ We define a shape object and implement some basic functions like equality
 declare type Axet;
 
 declare attributes Axet:
-  fusion_law,     // A FusLaw
+  Tgroup,         // An abelian group T
   axes,           // A GSet of the axes
-  tau,            // A map from Ax \times T to the group, where $T$ is the set of linear characters of the grading group of the fusion law
+  tau,            // A map from Ax \times T to G, where G = Group(Ax)
   Miyamoto_group; // The Miyamoto group on the axes
 
 declare type AxlShape: DecAlg;
 
 declare attributes AxlShape:
+  fusion_law,     // A FusLaw
   shape,          // Shape given as a sequence of tuples <S, type>, where S is a subset of axes and type is the type of 2-generated subgroup glued in on those axes
 
 intrinsic Information(Ax::Axet) -> List
@@ -60,11 +61,11 @@ end intrinsic;
 ===========  Basic functions  ===========
 
 */
-intrinsic FusionLaw(Ax::Axet) -> FusLaw
+intrinsic TGroup(Ax::Axet) -> Grp
   {
-  The fusion law of an axet.
+  The T-group of an axet.
   }
-  return Ax`fusion_law;
+  return Ax`Tgroup;
 end intrinsic
 
 intrinsic Axes(Ax::Axet) -> GSet
@@ -80,6 +81,13 @@ intrinsic Tau(Ax::Axet) -> Map
   }
   return Ax`tau;
 end intrinsic;
+
+intrinsic FusionLaw(Sh::AxlShape) -> FusLaw
+  {
+  The fusion law of a shape.
+  }
+  return Sh`fusion_law;
+end intrinsic
 
 intrinsic Shape(Sh::AxlShape) -> SeqEnum
   {
