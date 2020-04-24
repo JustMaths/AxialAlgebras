@@ -1,0 +1,11 @@
+{
+  MagmaJson
+  {
+    +json_and_utilities.spec
+  }
+  FusionLaws
+  {
+    FusionLaw.m
+  }
+  AxlShape.m
+}

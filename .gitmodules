@@ -6,3 +6,6 @@
 	path = DecomposedGModules
 	url = https://github.com/JustMaths/DecomposedGModules
 	branch = development
+[submodule "FusionLaws"]
+	path = FusionLaws
+	url = https://github.com/JustMaths/FusionLaws
