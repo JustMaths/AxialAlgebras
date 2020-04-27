@@ -61,7 +61,7 @@ intrinsic AxisSubgroup(Ax::Axet, x::.) -> GrpPerm
   {
   The axis subgroup of x.
   }
-  require IsCoercible(Ax, x): "You have not given a valid axis.";
+  require IsCoercible(Axes(Ax), x): "You have not given a valid axis.";
   tau := Tau(Ax);
   
   return sub< Group(Ax) | [ tau(x,t) : t in Component(Domain(tau), 2)]>;
@@ -153,16 +153,29 @@ end intrinsic;
 */
 intrinsic 'join'(X1::GSet, X2::GSet) -> GSet
   {
-  
+  For two GSets X1 and X2 with the same action group, returns their union.
   }
-  // NOT YET IMPLEMENTED
+  G := Group(X1);
+  require G eq Group(X2): "The two GSets do not have the same action group.";
+  X := IndexedSet([1..#X1+#X2]);
+  XxG := CartesianProduct(X, G);
+  f := map< XxG -> X | y :-> y[1] le #X1 select Image(y[2], X1, y[1]) else Image(y[2], X2, y[1]-#X1)+#X1>;
+  return GSet(G, X, f);
 end intrinsic;
 
 intrinsic 'join'(Ax1::Axet, Ax2::Axet) -> Axet
   {
-  
+  For two axets with the same action group and same T group, returns their union.
   }
-  // NOT YET IMPLEMENTED
+  T := Component(Domain(Tau(Ax1)), 2);
+  require T eq Component(Domain(Tau(Ax2)), 2): "The two tau-maps do not have the same T group.";
+  X := Axes(Ax1) join Axes(Ax2);
+  n := #Axes(Ax1);
+  
+  XxT := CartesianProduct(X, T);
+  tau := map<XxT -> Group(X) | p :-> p[1] le n select p@Tau(Ax1) else <p[1]-n, p[2]>@Tau(Ax2)>;
+  
+  return Axet(X, tau: faithful:=false, image:=false);
 end intrinsic;
 /*
 
@@ -177,11 +190,11 @@ function MapEq(f, g)
   return Domain(f) eq Domain(g) and [ i@f : i in Domain(f)] eq [ i@g : i in Domain(g)];
 end function;
 
-intrinsic 'eq'(S::Axet, T::Axet) -> BoolElt
+intrinsic 'eq'(Ax1::Axet, Ax2::Axet) -> BoolElt
   {
   Equality of axets.
   }
-  return GSetEq(Axes(S), Axes(T)) and MapEq(Tau(S), Tau(T));
+  return GSetEq(Axes(Ax1), Axes(Ax2)) and MapEq(Tau(Ax1), Tau(Ax2));
 end intrinsic;
 
 intrinsic IsIsomorphic(X1::GSet, X2::GSet) -> BoolElt, GrpPerm, Map
@@ -455,180 +468,4 @@ intrinsic TauMaps(X::GSet, T::GrpPerm: faithful := true, image := Group(X)) -> S
   
   return [ <tau, Stabiliser(N, Taus, tau)> where tau := Taus_orb_reps[i]
               : i in [1..#Taus_orb_reps]];
-end intrinsic;
-/*
-
-======= Admissibility of tau-maps =======
-
-*/
-intrinsic IsAdmissibleTauMap(X::GSet, tau::Map, FL::FusLaw: faithful := true) -> BoolElt
-  {
-  Is the tau-map tau an admissible tau-map for the given fusion law.  Currently only works with the Monster fusion law.
-  }
-  // Add more fusion laws here when we get them
-  require FL eq MonsterFusionLaw(): "Currently only works with the Monster fusion law.";
-  return IsMonsterAdmissibleTauMap(X, tau: faithful := faithful);
-end intrinsic;
-
-intrinsic HasAdmissibleTauMap(Ax::Axet, FL::FusLaw: faithful := true) -> BoolElt
-  {
-  "
-  }
-  return IsAdmissibleTauMap(Axes(Ax), Tau(Ax), FL: faithful := faithful);
-end intrinsic;
-
-intrinsic IsMonsterAdmissibleTauMap(X::GSet, tau::Map: faithful:=true, image:=Group(X)) -> BoolElt
-  {
-  Is the given tau-map is admissible for the Monster fusion law (or other similar laws).
-  
-  Specifically, this checks whether T has order 2 (or 1 if |X| = 1) and for any distinct pair a,b in X, the orbits of D_\{a,b\} := <tau_a, \tau_b> on a and b are either disjoint and have the same order 1,2, or 3; or are the same and have order 3, or 5.  It does not check whether the Miyamoto group is G.
-  
-  Optional parameters: faithful to require the action is faithful, image can be either a group, or false.  If false, there is no restriction on the Image of the tau map, if it is a group, we require the tau map to have this image.
-  }
-  G := Group(X);
-  T := Component(Domain(tau), 2);
-  if #X eq 1 and Order(T) le 2 then
-    return true;
-  elif not Order(T) eq 2 then
-    vprint ParAxlAlg, 2: "T does not have order equal two.";
-    return false;
-  end if;
-  
-  so := IsTauMap(X, T, tau: faithful:=faithful, image:=image);
-  if not so then return false; end if;
-  
-  // Check for a pair a,b, |a^D| = |b^D| and other size properties
-  pairs_orb_reps := [ o[2] : o in OrbitRepresentatives(
-                       ActionImage(G, GSet(G,X,{ {@i,j@} : j in [i+1..#X], i in [1..#X]})))];
-  
-  for pair in pairs_orb_reps do
-    D := sub<G | tau(pair[1], T.1), tau(pair[2], T.1)>;
-    o1 := Orbit(D, X, pair[1]);
-    o2 := Orbit(D, X, pair[2]);
-    if #o1 ne #o2 then
-      return false;
-    elif o1 eq o2 then
-      if #o1 notin {3,5} then
-        return false;
-      end if;
-    else
-      if #o1 notin {1,2,3} then
-        return false;
-      end if;
-    end if;
-  end for;
-  
-  return true; 
-end intrinsic;
-
-intrinsic HasMonsterAdmissibleTauMap(Ax::Axet: faithful := true) -> BoolElt
-  {
-  "
-  }
-  return IsMonsterAdmissibleTauMap(Axes(Ax), Tau(Ax): faithful := faithful);
-end intrinsic;
-
-intrinsic AdmissibleTauMaps(X::GSet, FL::FusLaw: faithful := true, image := Group(X)) -> SeqEnum
-  {
-  Find all the addmissible tau-maps for the given fusion law up to automorphism.  Returns a sequence of tuples < tau, stabiliser(tau)>.  Currently only works with the Monster fusion law.
-  
-  Optional parameters: faithful to require the action is faithful, image can be either a group, or false.  If false, there is no restriction on the Image of the tau map, if it is a group, we require the tau map to have this image.
-  }
-  // Add more fusion laws here when we get them
-  require FL eq MonsterFusionLaw(): "Currently only works with the Monster fusion law.";
-  return MonsterAdmissibleTauMaps(X: faithful:=faithful, image:=image);
-end intrinsic;
-
-intrinsic MonsterAdmissibleTauMaps(X::GSet: faithful := true, image := Group(X)) -> SeqEnum
-  {
-  Find all the tau-maps which are admissible for the Monster fusion law (or other similar laws) up to automorphism.  Returns a sequence of tuples < tau, stabiliser(tau)>.
-  Optional parameters: faithful to require the action is faithful, image can be either a group, or false.  If false, there is no restriction on the Image of the tau map, if it is a group, we require the tau map to have this image.
-  }
-  taus := TauMaps(X, CyclicGroup(2): faithful := faithful, image := image);
-  
-  return [ t : t in taus | IsMonsterAdmissibleTauMap(X, t[1]: faithful := faithful, image := image)];
-
-  // What is below is only almost the same as the above, except it rules out possible a few cases initially, and only dedupes for the group action later.
-  /*
-  G := Group(X);
-  if faithful then
-    require IsFaithful(G, X): "The action is not faithful";
-  end if;
-  
-  T := CyclicGroup(2);
-  XxT := CartesianProduct(X, T);
-  if #X eq 1 and IsFaithful(Group(X), X) then
-      return [map<XxT->G | i:->G!1>];
-        // Do I need a special case here ???
-  end if;
-  
-  // returns all homomorphisms between T and H
-  Tab, T_to_Tab := AbelianGroup(T);
-  function HomSet(T, H)
-    Hab, H_to_Hab := AbelianGroup(H);
-    homs, homs_to_maps := Hom(Tab, Hab);
-    return {@ T_to_Tab*(f@homs_to_maps)*H_to_Hab^-1 : f in homs @};
-  end function;
-  
-  // For the Monster, the orbits of D_{a,b} = < \tau_a, \tau_b > on a and b have the same size.
-  // So, if a^G = a, then b^D = b for all b.  In particular, \tau_a in in the kernel K of the action.
-  // It is also in Z(G_a) = Z(G).
-  
-  orb_reps := OrbitRepresentatives(ActionImage(G, X));
-  possibles := [ o[1] eq 1 select HomSet(T, Centre(G) meet ActionKernel(G, X))
-                   else HomSet(T, Centre(Stabiliser(G, X, o[2]))) : o in orb_reps];
-  
-  cart := [ c : c in CartesianProduct(possibles)];
-  
-  tau_maps := {@ @};
-  pairs_orbs_reps := [ o[2] : o in OrbitRepresentatives(
-                        ActionImage(G, GSet(G,X,{ {@i,j@} : j in [i+1..#X], i in [1..#X]})))];
-  
-  function OrbitConjugator(x)
-    assert exists(t){ <i,g> : i in [1..#orb_reps] | so
-                      where so,g := IsConjugate(G, X, orb_reps[i,2], x)}
-    return Explode(t);  
-  end function;
-  
-  for poss in CartesianProduct(possibles) do
-    tau := map< XxT -> G | p :-> (p[2]@poss[i])^g where i,g := OrbitConjugator(p[1])>;
-    if Type(image) eq GrpPerm and TauImage(tau) ne image then
-      continue;
-    end if;
-    
-    // We verify it is admissible
-    for pair in pairs_orb_reps do
-      D := sub<G | tau(pair[1], T.1), tau(pair[2], T.1)>;
-      o1 := Orbit(D, X, pair[1]);
-      o2 := Orbit(D, X, pair[2]);
-      if #o1 ne #o2 then
-        continue poss;
-      elif o1 eq o2 then
-        if #o1 notin {3,5} then
-          continue poss;
-        end if;
-      else
-        if #o1 notin {1,2,3} then
-          continue poss;
-        end if;
-      end if;
-      end for;
-    Include(~tau_maps, tau);
-  end for;
-  
-  if #tau_maps eq 0 then
-    return [];
-  end if;
-  
-  // We now wish to dedupe the set of tau maps using the automorphisms of Ax
-  Taus := TauAction(X, tau_maps);
-  N := Group(Taus);
-
-  // We wish to get a deterministic algorithm, so we sort the tau-maps
-  Taus_orbs := [ Sort(o, TauSort) : o in Orbits(N, Taus)];
-  Taus_orb_reps := Sort([o[1] : o in Taus_orbs], TauSort);
-  
-  return [ <tau, Stabiliser(N, Taus, tau)> where tau := Taus_orb_reps[i]
-              : i in [1..#Taus_orb_reps]];
-  */
 end intrinsic;
