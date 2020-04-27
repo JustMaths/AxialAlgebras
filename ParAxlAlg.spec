@@ -7,5 +7,6 @@
   {
     FusionLaw.m
   }
+  Axet.m
   AxlShape.m
 }
