@@ -5,7 +5,7 @@
   }
   FusionLaws
   {
-    FusionLaw.m
+    +FusionLaw.spec
   }
   Axet.m
   AxlShape.m
