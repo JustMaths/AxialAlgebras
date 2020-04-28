@@ -50,6 +50,13 @@ intrinsic Tau(Ax::Axet) -> Map
   return Ax`tau;
 end intrinsic;
 
+intrinsic '#'(Ax::Axet) -> RngIntElt
+  {
+  The size of the axet.
+  }
+  return #Axes(Ax);
+end intrinsic;
+
 intrinsic Group(Ax::Axet) -> GrpPerm
   {
   The full group of an axet.
@@ -176,6 +183,38 @@ intrinsic 'join'(Ax1::Axet, Ax2::Axet) -> Axet
   tau := map<XxT -> Group(X) | p :-> p[1] le n select p@Tau(Ax1) else <p[1]-n, p[2]>@Tau(Ax2)>;
   
   return Axet(X, tau: faithful:=false, image:=false);
+end intrinsic;
+
+intrinsic Closure(Ax::Axet, Y::.) -> Axet, Map
+  {
+  Given a set Y of axes, returns their Miyamoto closure Z and an inclusion map Z \to X.
+  }
+  Y := Flat(< ISA(Type(y), MakeType("Set")) select Setseq(y) else y : y in Y>);
+  X := Axes(Ax);
+  require forall{y : y in Y | IsCoercible(X, y)}: "Not all elements are coercible into the axet.";
+
+  H := sub<Group(Ax) | [ AxisSubgroup(Ax, y) : y in Y]>;
+  Z := OrbitClosure(H, X, {@ y : y in Y@});
+  
+  tau := Tau(Ax);
+  tau := map<CartesianProduct(Z, Domain(tau)[2]) -> H | p:-> p@tau>;
+  
+  return Axet(Z, tau: faithful:=false, image:=false), map<Z->X | i:->i>;
+end intrinsic;
+
+intrinsic SubConstructor(Ax::Axet, Y::.) -> Axet, Map
+  {
+  Given a set Y of axes, find their Miyamoto closure Z, and then takes the subaxet of Ax given by Z.  Also returns an inclusion map.
+  }
+  Z, inc := Closure(Ax, Y);
+  Z_axes := Axes(Z);
+  H := Stabiliser(Group(Ax), Axes(Ax), Z_axes);
+  
+  Z := GSet(H, Axes(Ax), Z_axes);
+  tau := Tau(Ax);
+  tau := map< CartesianProduct(Z_axes, Domain(tau)[2]) -> H | p:-> p@tau>;
+  
+  return Axet(Z_axes, tau: faithful:=false, image:=false), map<Z->Axes(Ax) | i:->i>;
 end intrinsic;
 /*
 
@@ -468,4 +507,72 @@ intrinsic TauMaps(X::GSet, T::GrpPerm: faithful := true, image := Group(X)) -> S
   
   return [ <tau, Stabiliser(N, Taus, tau)> where tau := Taus_orb_reps[i]
               : i in [1..#Taus_orb_reps]];
+end intrinsic;
+/*
+
+======= Loading and saving an Axet =======
+
+*/
+intrinsic AxetToList(Ax::Axet) -> MonStgElt
+  {
+  Transform an Axet into a List prior to serialisation as a JSON.
+  }
+  L := [* *];
+  Append(~L, <"class", "Axet">);
+  
+  G := Group(Ax);
+  X := Axes(Ax);
+  tau := Tau(Ax);
+  T := Component(Domain(tau), 2);
+  ReduceGenerators(~T);
+  Tgen := GeneratorsSequence(T);
+  ReduceGenerators(~G);
+  Ggen := GeneratorsSequence(G);
+  act := Action(G, X);
+  orb_reps := {@ o[1] : o in Orbits(G, X) @};
+  
+  Append(~L, <"GSet", [* [*g, g@act*] : g in Ggen *]>);
+  Append(~L, <"T", [* t : t in Tgen*]>);
+  Append(~L, <"tau", [* [* [* i, j *], <i,Tgen[j]>@tau *] : i in orb_reps, j in [1..#Tgen] *]>);
+  
+  return L;
+end intrinsic;
+
+intrinsic Axet(A::Assoc) -> Axet
+  {
+  Create an axet from an associative array.  We assume that the associative array represents the axet stored in json format.
+  }
+  keys := Keys(A);
+  require "class" in keys and A["class"] eq "Axet": "The file given does not encode an axet.";
+  
+  gens := [Numbers(k[1]) : k in A["GSet"]];
+  images := [Numbers(k[2]) : k in A["GSet"]];
+  n := Max(gens[1]);
+  G := PermutationGroup<n | gens>;
+  m := Max(images[1]);
+  act := hom<G -> Sym(m) | [<G!gens[i], Sym(m)!images[i]> : i in [1..#gens]]>;
+  
+  X := IndexedSet([1..m]);
+  XxG := CartesianProduct(X, G);
+  f := map<XxG -> X | y:-> y[1]^(y[2]@act)>;
+  X := GSet(G, X, f);
+  
+  Tgens := [Numbers(k) : k in A["T"]];
+  T := PermutationGroup<Max(Tgens[1]) | Tgens>;
+  
+  XxT := CartesianProduct(X, T);
+  
+  orb_reps := {@ p[1,1] : p in A["tau"] @};
+  homs := [ hom<T->G | [ <Tgens[p[1,2]], G!Numbers(p[2])> : p in A["tau"] | p[1,1] eq orb_reps[i]]>
+                : i in [1..#orb_reps] ];
+  
+  function OrbitConjugator(x)
+    assert exists(t){ <i,g> : i in [1..#orb_reps] | so
+                      where so,g := IsConjugate(G, X, orb_reps[i], x)};
+    return Explode(t);  
+  end function;
+  
+  tau := map< XxT -> G | p :-> (p[2]@homs[i])^g where i,g := OrbitConjugator(p[1])>;
+  
+  return Axet(X, tau: faithful:=false, image:=false);
 end intrinsic;

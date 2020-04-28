@@ -71,7 +71,7 @@ end intrinsic;
 For a fusion law FL, in its directory Directory(FL), there is a file called info.json
 It encodes the following properties:
 
- - class - "Fusion Law Information"
+ - class - "Fusion law information"
  
  - fusion_law - Directory(FL)
  
@@ -83,20 +83,33 @@ It encodes the following properties:
  
  - subalgebras - an Assoc with keys being the 2-gen algebra names and values being a list of tuples [subalg_name, axes]
 */
-function GetFusionLawInfo(FL)
+intrinsic GetFusionLawInformation(FL::FusLaw) -> Assoc
+  {
+  Returns the fusion law information.
+  }
   filename := Sprintf("%o/%o/info.json", library_location, Directory(FL));
   
   string := Read(filename);
   // remove any end of line characters that magma tends to add
   string := &cat Split(string, "\\\n");
   info := ParseJSON(string);
+  
+  require "class" in Keys(info) and info["class"] eq "Fusion law information" and info["fusion_law"] eq "Monster_1,4_1,32": "The file given does not encode the correct fusion law information.";
+  
   info["admissible"] := function(X, tau)
     return eval(info["admissible"]);
   end function;
+  
+  basics := Keys(info["basic_algebras"]);
+  require basics eq Keys(info["subalgebras"]): "The list of 2-generated algebras do not match the list of subalgebras for the 2-generated algebras.";
+   for k in basics do
+     info["basic_algebras"][k] := Axet(info["basic_algebras"][k]);
+   end for;
+  
   return info;
-end function;
+end intrinsic;
 
-intrinsic IsAdmissibleTauMap(X::GSet, tau::Map, FL::FusLaw: faithful := true, image:=Group(X)) -> BoolElt
+intrinsic IsAdmissibleTauMap(X::GSet, tau::Map, FL::FusLaw: faithful:=true, image:=Group(X)) -> BoolElt
   {
   Is the tau-map tau an admissible tau-map for the given fusion law.  Currently only works with the Monster fusion law.
   }
@@ -105,16 +118,16 @@ intrinsic IsAdmissibleTauMap(X::GSet, tau::Map, FL::FusLaw: faithful := true, im
   so := IsTauMap(X, T, tau: faithful:=faithful, image:=image);
   if not so then return false; end if;
   
-  info := GetFusionLawInfo(FL);
+  info := GetFusionLawInformation(FL);
   IsAdmissible := info["admissible"];
   return IsAdmissible(X, tau);
 end intrinsic;
 
-intrinsic HasAdmissibleTauMap(Ax::Axet, FL::FusLaw: faithful := true, image:=Group(Ax)) -> BoolElt
+intrinsic HasAdmissibleTauMap(Ax::Axet, FL::FusLaw: faithful:=true, image:=Group(Ax)) -> BoolElt
   {
   "
   }
-  return IsAdmissibleTauMap(Axes(Ax), Tau(Ax), FL: faithful := faithful, image:=image);
+  return IsAdmissibleTauMap(Axes(Ax), Tau(Ax), FL: faithful:=faithful, image:=image);
 end intrinsic;
 
 intrinsic IsMonsterAdmissibleTauMap(X::GSet, tau::Map: faithful:=true, image:=Group(X)) -> BoolElt
@@ -128,33 +141,33 @@ intrinsic IsMonsterAdmissibleTauMap(X::GSet, tau::Map: faithful:=true, image:=Gr
   return IsAdmissibleTauMap(X, tau, MonsterFusionLaw(): faithful := faithful, image:=image);
 end intrinsic;
 
-intrinsic HasMonsterAdmissibleTauMap(Ax::Axet: faithful := true) -> BoolElt
+intrinsic HasMonsterAdmissibleTauMap(Ax::Axet: faithful:=true, image:=Group(Ax)) -> BoolElt
   {
   "
   }
   return IsAdmissibleTauMap(Axes(Ax), Tau(Ax), MonsterFusionLaw(): faithful := faithful, image:=image);
 end intrinsic;
 
-intrinsic AdmissibleTauMaps(X::GSet, FL::FusLaw: faithful := true, image := Group(X)) -> SeqEnum
+intrinsic AdmissibleTauMaps(X::GSet, FL::FusLaw: faithful:=true, image:=Group(X)) -> SeqEnum
   {
   Find all the addmissible tau-maps for the given fusion law up to automorphism.  Returns a sequence of tuples < tau, stabiliser(tau)>.  Currently only works with the Monster fusion law.
   
   Optional parameters: faithful to require the action is faithful, image can be either a group, or false.  If false, there is no restriction on the Image of the tau map, if it is a group, we require the tau map to have this image.
   }
-  taus := TauMaps(X, CyclicGroup(2): faithful := faithful, image := image);
+  taus := TauMaps(X, CyclicGroup(2): faithful:=faithful, image:=image);
   
-  return [ t : t in taus | IsAdmissibleTauMap(X, t[1], FL: faithful := faithful, image := image)];
+  return [ t : t in taus | IsAdmissibleTauMap(X, t[1], FL: faithful:=faithful, image:=image)];
 end intrinsic;
 
-intrinsic MonsterAdmissibleTauMaps(X::GSet: faithful := true, image := Group(X)) -> SeqEnum
+intrinsic MonsterAdmissibleTauMaps(X::GSet: faithful:=true, image:=Group(X)) -> SeqEnum
   {
   Find all the tau-maps which are admissible for the Monster fusion law (or other similar laws) up to automorphism.  Returns a sequence of tuples < tau, stabiliser(tau)>.
   Optional parameters: faithful to require the action is faithful, image can be either a group, or false.  If false, there is no restriction on the Image of the tau map, if it is a group, we require the tau map to have this image.
   }
-  taus := TauMaps(X, CyclicGroup(2): faithful := faithful, image := image);
+  taus := TauMaps(X, CyclicGroup(2): faithful:=faithful, image:=image);
   
   return [ t : t in taus |
-            IsAdmissibleTauMap(X, t[1], MonsterFusionLaw(): faithful := faithful, image := image)];
+            IsAdmissibleTauMap(X, t[1], MonsterFusionLaw(): faithful:=faithful, image:=image)];
 end intrinsic;
 /* 
 
@@ -283,7 +296,7 @@ end intrinsic;
 */
 function SubalgebraOrb(Ax, S)
   D := sub<MiyamotoGroup(Ax) | [AxisSubgroup(Ax, x) : x in S]>;
-  return &join[ Orbit(D, Axes(Ax), x) : x in S];
+  return OrbitClosure(D, Axes(Ax), S);
 end function;
 
 intrinsic ShapeGraph(Ax::Axet) -> GrphDir
@@ -319,19 +332,67 @@ end intrinsic;
 ======= Shapes =======
 
 */
+// For a connected component of the shape graph, return a set of all possible configurations of shape for the source vertices.
+// NB a connected component can have multiple source nodes.
+function GetPossibleShapes(Gr, comp)
+  sources := Sources(comp);
+
+end function;
+
+intrinsic Sources(Gr::GrphDir) -> IndxSet
+  {
+  The set of sources of the directed graph.
+  }
+  return {@ v : v in Vertices(Gr) | InDegree(v) eq 0 @};
+end intrinsic;
+
+intrinsic Sinks(Gr::GrphDir) -> IndxSet
+  {
+  The set of sinks of the directed graph.
+  }
+  return {@ v : v in Vertices(Gr) | OutDegree(v) eq 0 @};
+end intrinsic;
+
+intrinsic WeaklyConnectedComponents(Gr::GrphDir) -> IndxSet
+  {
+  Returns the weakly connected components of a directed graph.
+  }
+  UnGr := UnderlyingGraph(Gr);
+  Gr_verts := Vertices(Gr);
+  
+  return [ sub<Gr | ChangeUniverse(comp, Gr_verts) > : comp in Components(UnGr)];
+end intrinsic;
+
 intrinsic Shapes(Ax::Axet, FL::FusLaw) -> IndxSet
   {
   Returns the set of shapes for the axet Ax.
   }
+  require HasAdmissibleTauMap(Ax, FL): "The axet does not have an admissible tau-map.";
   
-  require HasMonsterAdmissibleTauMap(Ax): "The axet does not have a Monster-admissible tau-map.";
-  
+  G := Group(Ax);
+  X := Axes(Ax);
   Gr := ShapeGraph(Ax);
   
-  info := GetFusionLawInfo(FL);
+  info := GetFusionLawInformation(FL);
   // This gives us the information about the subalgebras of the fusion law
+  if not info["complete_basic_algebras"] then
+    print "Warning: not all 2-generated subalgebras are known.";
+  end if;
+  
+  basics := info["basic_algebras"];
+  basics_names := IndexedSet(Keys(basics));
+  nums := [ #basics[k] : k in basics_names ];
   
   if info["undirected_shape_graph"] then
+    UnGr := UnderlyingGraph(Gr);
+    comps := Components(UnGr);
+    orbs := [ sub<Ax| p> : p in Support(Gr)];
+    
+    // For a connected component, the vertices with only out arrows are the ones which dominate.  These define the vertices below.
+    // GetPossibleShapes returns a sequence of possible shapes for a connected component
+    
+    cart := [ GetPossibleShapes(comp) : comp in comps ];
+    // return {@ AxlShape(... c) : c in cart @};
     
   else
     require false: "Undirected shape graphs are not currently implemented.";
