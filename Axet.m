@@ -216,6 +216,26 @@ intrinsic SubConstructor(Ax::Axet, Y::.) -> Axet, Map
   
   return Axet(Z_axes, tau: faithful:=false, image:=false), map<Z->Axes(Ax) | i:->i>;
 end intrinsic;
+
+intrinsic Core(Ax::Axet) -> Axet
+  {
+  The core of an axet.  That is, the set of axes X with the group acting being the Miyamoto group of the axet factored out by the kernel of the action.
+  }
+  G := Group(Ax);
+  X := Axes(Ax);
+  Miy := MiyamotoGroup(Ax);
+  ker := ActionKernel(Miy, X);
+  Q, quo := quo<Miy|ker>;
+  
+  Y := IndexedSet(X);
+  YxQ := CartesianProduct(Y, G);
+  f := map< YxQ -> Y | y :-> Image(y[2]@@quo, X, y[1])>;
+  Y := GSet(Q, Y, f);
+  
+  tau := map< CartesianProduct(Y, TGroup(Ax)) -> Q | p :-> p@Tau(Ax)@quo>;
+  
+  return Axet(Y, tau: faithful:=false, image:=false);
+end intrinsic;
 /*
 
 ======= Equality and isomorphism =======
@@ -236,9 +256,9 @@ intrinsic 'eq'(Ax1::Axet, Ax2::Axet) -> BoolElt
   return GSetEq(Axes(Ax1), Axes(Ax2)) and MapEq(Tau(Ax1), Tau(Ax2));
 end intrinsic;
 
-intrinsic IsIsomorphic(X1::GSet, X2::GSet) -> BoolElt, GrpPerm, Map
+intrinsic IsIsomorphic(X1::GSet, X2::GSet) -> BoolElt, Map, Map
   {
-  Checks whether G1 and G2 are isomorphic and have isomorphic actions.  If so, returns the permutataion X1 -> X2 and isomorphism phi:G1 -> G2.
+  Checks whether G1 and G2 are isomorphic and have isomorphic actions.  If so, returns the map phi:X1 -> X2 and isomorphism psi:G1 -> G2.
   }
   G1 := Group(X1);
   G2 := Group(X2);
@@ -248,19 +268,33 @@ intrinsic IsIsomorphic(X1::GSet, X2::GSet) -> BoolElt, GrpPerm, Map
   end if;
   
   // Find the isomorphism between G1 and G2
-  so, phi := IsIsomorphic(G1, G2);
+  so, psi := IsIsomorphic(G1, G2);
   if not so then return false, _, _; end if;
   
-  //Now find the equivalence between the action of G1 on X1 and G1@phi on X2
+  // This is wasteful as we throw away the isomorphism just found above, but I can't see how to do it better
   
-  act1, GG1 := Action(G1, X1);
-  act2, GG2 := Action(G1@phi, X2);
+  // We need to make standard versions of both
+  function StandardAction(X)
+    Y := IndexedSet([1..#X]);
+    H := Group(X);
+    YxH := CartesianProduct(Y, H);
+    f := map<YxH -> Y | y:-> Position(X, Image(y[2], X, X[y[1]]))>;
+    return GSet(H, Y, f);
+  end function;
+  
+  Y1 := StandardAction(X1);
+  Y2 := StandardAction(X2);
+  act1, GG1 := Action(G1, Y1);
+  act2, GG2 := Action(G2, Y2);
   so, perm := IsConjugate(Sym(#X1), GG1, GG2);
   if not so then return false, _, _; end if;
   
-  assert2 forall{<i,g> : i in X1, g in Generators(G1) | Image(g,X1,i)^perm eq Image(g@phi, X2, i^perm)};
+  phi := map< X1 -> X2 | i:-> X2[Position(X1,i)^perm], j:-> X1[Position(X2,j)^(perm^-1)]>;
+  psi := hom<G1 -> G2 | [<g,((g@act1)^perm)@@act2> : g in FewGenerators(G1)]>;
   
-  return true, perm, phi;
+  assert2 forall{<i,g> : i in X1, g in Generators(G1) | Image(g,X1,i)@phi eq Image(g@psi, X2, i@phi)};
+  
+  return true, phi, psi;
 end intrinsic;
 
 intrinsic ActionNormaliser(X::GSet) -> GrpPerm
@@ -268,19 +302,19 @@ intrinsic ActionNormaliser(X::GSet) -> GrpPerm
   The normaliser of the action.
   }
   G := Group(X);
-  GG := Stabiliser(Sym(#X), Set(Orbits(G, X)));
+  GG := Stabiliser(Sym(X), Set(Orbits(G, X)));
   N := Normaliser(GG, ActionImage(G, X));
   
   return N;
 end intrinsic;
 
-intrinsic IsIsomorphic(Ax1::Axet, Ax2::Axet) -> BoolElt, GrpPermElt, Map
+intrinsic IsIsomorphic(Ax1::Axet, Ax2::Axet) -> BoolElt, Map, Map
   {
-  Tests if Ax1 and Ax2 are isomorphic.  If so, it returns a pair, perm in Sym(|Ax1|) and phi:G1->G2 such that
+  Tests if Ax1 and Ax2 are isomorphic.  If so, it returns a pair, phi:X1 -> X2 and isomorphism psi:G1 -> G2 such that
   
-  (i^g)^perm = (i^perm)^(g@phi) for all i in Ax1, g in G1 and
+  (i^g)@phi = (i@phi)^(g@psi) for all i in Ax1, g in G1 and
   
-  tau1(i,t)^perm = tau2(i^perm, t) for all i in Ax1, t in T
+  tau1(i,t)^phi = tau2(i^phi, t) for all i in Ax1, t in T
   }
   T := TGroup(Ax1);
   require T eq TGroup(Ax2): "The two T-groups are not equal.";
@@ -288,14 +322,14 @@ intrinsic IsIsomorphic(Ax1::Axet, Ax2::Axet) -> BoolElt, GrpPermElt, Map
   X1 := Axes(Ax1); G1 := Group(Ax1); tau1 := Tau(Ax1);
   X2 := Axes(Ax2); G2 := Group(Ax2); tau2 := Tau(Ax2);
   
-  so, perm, phi:= IsIsomorphic(X1, X2);
+  so, phi, psi:= IsIsomorphic(X1, X2);
   if not so then return false, _, _; end if;
   
   N := ActionNormaliser(X2);
   
   // We form the tau map for the conjugated X1
   X2xT := Domain(tau2);
-  tau_adj := map<X2xT -> G2 | p:-> <p[1]^(perm^-1), p[2]>@tau1@phi>;
+  tau_adj := map<X2xT -> G2 | p:-> <p[1]@@phi, p[2]>@tau1@psi>;
   
   // We define a quick version of equality of maps
   orb_reps := {@ Representative(o) : o in Orbits(G2, X2)@};
@@ -315,12 +349,12 @@ intrinsic IsIsomorphic(Ax1::Axet, Ax2::Axet) -> BoolElt, GrpPermElt, Map
   
   if not so then return false, _, _; end if;
   
-  // We adjust the permutation by n
+  // We adjust phi by n
   
-  perm := perm*n;
-  assert2 TauMapEq(tau2, map< X2xT -> Group(X2) | p:-> <p[1]^(perm^-1), p[2]>@tau1@phi>);
+  phi := map< X1 -> X2 | i:-> (i@phi)^n, j:-> (j^(n^-1))@@phi>;
+  assert2 TauMapEq(tau2, map< X2xT -> Group(X2) | p:-> <p[1]@@phi, p[2]>@tau1@psi>);
   
-  return true, perm, phi;
+  return true, phi, psi;
 end intrinsic;
 /*
 

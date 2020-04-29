@@ -102,9 +102,10 @@ intrinsic GetFusionLawInformation(FL::FusLaw) -> Assoc
   
   basics := Keys(info["basic_algebras"]);
   require basics eq Keys(info["subalgebras"]): "The list of 2-generated algebras do not match the list of subalgebras for the 2-generated algebras.";
-   for k in basics do
-     info["basic_algebras"][k] := Axet(info["basic_algebras"][k]);
-   end for;
+  for k in basics do
+    info["basic_algebras"][k] := Axet(info["basic_algebras"][k]);
+    info["subalgebras"][k] := AssociativeArray([* <kk, [ IndexedSet(S) : S in Numbers(info["subalgebras"][k,kk])]> : kk in Keys(info["subalgebras"][k]) *]);
+  end for;
   
   return info;
 end intrinsic;
@@ -264,7 +265,7 @@ intrinsic IsIsomorphic(Sh1::AxlShape, Sh2::AxlShape) -> BoolElt, GrpPermElt, Map
     return false, _, _;
   end if;
   
-  so, perm, phi := IsIsomorphic(Axet(Sh1), Axet(Sh2));
+  so, phi, psi := IsIsomorphic(Axet(Sh1), Axet(Sh2));
   if not so then return false, _, _; end if;
   
   tau2 := Tau(Sh2);
@@ -279,15 +280,15 @@ intrinsic IsIsomorphic(Sh1::AxlShape, Sh2::AxlShape) -> BoolElt, GrpPermElt, Map
     return i;
   end function;
   
-  so := exists(h){h : h in stab | forall{sh : sh in Shape(Sh1) | sh[2] eq shape2[orbmember(sh[1]^(perm*h))  , 2] }};
+  so := exists(h){h : h in stab | forall{sh : sh in Shape(Sh1) | sh[2] eq shape2[orbmember(sh[1]@phi^h), 2] }};
   if not so then
     return false, _, _;
   end if;
   
-  perm := perm*h;
-  assert2 MapEq(tau2, map<Domain(tau2) -> Codomain(tau2) | p:-> <p[1]^(perm^-1), p[2]>@Tau(Sh1)@phi>);
+  phi := map< Axes(Sh1) -> Axes(Sh2) | i:-> (i@phi)^h, j:-> (j^(h^-1))@@phi>;
+  assert2 MapEq(tau2, map<Domain(tau2) -> Codomain(tau2) | p:-> <p[1]@@phi, p[2]>@Tau(Sh1)@psi>);
   
-  return true, perm, phi;
+  return true, phi, psi;
 end intrinsic;
 /*
 
@@ -299,7 +300,7 @@ function SubalgebraOrb(Ax, S)
   return OrbitClosure(D, Axes(Ax), S);
 end function;
 
-intrinsic ShapeGraph(Ax::Axet) -> GrphDir
+intrinsic ShapeGraph(Ax::Axet) -> GrphDir, GrphVertSet, GrphEdgeSet
   {
   Returns the shape graph.  It has vertices labelled by pairs \{a,b\} of distinct elements of orbits of Ax x Ax and a directed edge \{a,b\} to \{c,d\} when \{a,b\} dominates \{c,d\}.
   }
@@ -332,13 +333,6 @@ end intrinsic;
 ======= Shapes =======
 
 */
-// For a connected component of the shape graph, return a set of all possible configurations of shape for the source vertices.
-// NB a connected component can have multiple source nodes.
-function GetPossibleShapes(Gr, comp)
-  sources := Sources(comp);
-
-end function;
-
 intrinsic Sources(Gr::GrphDir) -> IndxSet
   {
   The set of sources of the directed graph.
@@ -363,6 +357,12 @@ intrinsic WeaklyConnectedComponents(Gr::GrphDir) -> IndxSet
   return [ sub<Gr | ChangeUniverse(comp, Gr_verts) > : comp in Components(UnGr)];
 end intrinsic;
 
+function InterpretShape(sh)
+  so, exp, S := Regexp("([0-9]+)(.+)", sh);
+  assert so and exp eq sh;
+  return StringToInteger(S[1]), S[2];
+end function;
+
 intrinsic Shapes(Ax::Axet, FL::FusLaw) -> IndxSet
   {
   Returns the set of shapes for the axet Ax.
@@ -371,8 +371,9 @@ intrinsic Shapes(Ax::Axet, FL::FusLaw) -> IndxSet
   
   G := Group(Ax);
   X := Axes(Ax);
-  Gr := ShapeGraph(Ax);
-  
+  Gr, Gr_v, Gr_e := ShapeGraph(Ax);
+  Grvert_to_pos := func<v | Position(Vertices(Gr),v)>;
+  Grvert_to_set := func<v | Support(Gr)[v@Grvert_to_pos]>;
   info := GetFusionLawInformation(FL);
   // This gives us the information about the subalgebras of the fusion law
   if not info["complete_basic_algebras"] then
@@ -382,23 +383,94 @@ intrinsic Shapes(Ax::Axet, FL::FusLaw) -> IndxSet
   basics := info["basic_algebras"];
   basics_names := IndexedSet(Keys(basics));
   nums := [ #basics[k] : k in basics_names ];
+  subalgs := info["subalgebras"];
   
-  if info["undirected_shape_graph"] then
-    UnGr := UnderlyingGraph(Gr);
-    comps := Components(UnGr);
-    orbs := [ sub<Ax| p> : p in Support(Gr)];
+  orbs := [ sub<Ax| p> : p in Support(Gr)];
+  comps := WeaklyConnectedComponents(Gr);
+  all_sources := AssociativeArray([* <comp, Sources(comp)> : comp in comps*]);
+  
+  // For a connected component of the shape graph, GetPossibleShapes returns a set of all possible configurations of shape for the connected component.
+  function GetPossibleShapes(comp)
+    vert_to_pos := func<v | Position(Vertices(comp),v)>;
     
     // For a connected component, the vertices with only out arrows are the ones which dominate.  These define the vertices below.
-    // GetPossibleShapes returns a sequence of possible shapes for a connected component
+    sources := all_sources[comp];
+    sources_axets := [ orbs[v@Grvert_to_pos] : v in sources];
+    poss := [ [ basics_names[i] : i in [1..#basics] | nums[i] eq #Bx] : Bx in sources_axets];
     
-    cart := [ GetPossibleShapes(comp) : comp in comps ];
-    // return {@ AxlShape(... c) : c in cart @};
+    // Now we need to check for each combination whether their subalgebras are compatible.
+    cart := CartesianProduct(poss);
     
-  else
-    require false: "Undirected shape graphs are not currently implemented.";
-  end if;
+    comp_shapes := [];
+    for c in cart do
+      labels := [];
+      // Set the labels
+      for i in [1..#sources] do
+        labels[sources[i]@vert_to_pos] := c[i];
+      end for;
+      
+      // Now recursively cascade the labels down the graph, checking for compatibility at each stage
+      queue := sources;
+      while not IsEmpty(queue) do
+        v := queue[1];
+        queue := queue[2..#queue];
+
+        Ax_v := orbs[v@Grvert_to_pos];
+        label_v:= labels[v@vert_to_pos];
+        so, phi, psi := IsIsomorphic(basics[label_v], Core(Ax_v));
+        if not so then
+          continue c;
+        end if;
+
+        num_v := InterpretShape(label_v);
+        out := IndexedSet(OutNeighbours(v));
+        out_algs := [ orbs[w@Grvert_to_pos] : w in out];
+        
+        // They are isomorphic as axets, so we now try to pair up the subalgebras of the putative basic algebra with that of Ax_v
+        keys := Keys(subalgs[label_v]);
+        
+        for k in keys do
+          num_k := InterpretShape(k);
+          for p in subalgs[label_v, k] do
+            // the pair p lies in a conjugacy class
+            assert exists(w){ out[i] : i in [1..#out] | #out_algs[i] eq num_k and
+                      IsConjugate(G, X, p@phi, out[i]@Grvert_to_set)};
+            
+            // Check the label is consistent if it is defined
+            if IsDefined(labels, w@vert_to_pos) then
+              if not labels[w@vert_to_pos] eq k then
+                continue c;
+              end if;
+            else
+              labels[w@vert_to_pos] := k;
+            end if;
+          end for;
+        end for;
+        
+        // all the labels for the out vertices (subalgebras) should now be defined
+        assert forall{ w : w in out | IsDefined(labels, w@vert_to_pos)};
+        // Add the out edges to the queue
+        queue join:=out;
+      end while;
+      assert IsComplete(labels);
+      // The labels are all defined and consistent
+      Append(~comp_shapes, labels);
+    end for;
+    
+    return comp_shapes;
+  end function;
+
+  // We may now build all the possible shapes
+  cart := [ GetPossibleShapes(comp) : comp in comps ];
+  //sources := [ [ Position(Vertices(comp), v) : v in Sources(comp)] : comp in comps];
+  shapes := [];
+  for c in cart do
+    sh := [* < Set(Axes(orbs[w@Grvert_to_pos])), c[Position(Vertices(comps[i]), w)]>
+                     : w in all_sources[comps[i]], i in [1..#c] *];
+    Append(~shapes, AxlShape(Ax, sh));
+  end for;
   
-  // NOT YET IMPLEMENTED
+  return IndexedSet(shapes);
 end intrinsic;
 
 intrinsic MonsterShapes(G::GrpPerm) -> IndxSet
