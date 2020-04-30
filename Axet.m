@@ -8,7 +8,8 @@ declare type Axet;
 declare attributes Axet:
   axes,           // A GSet of the axes
   tau,            // A map from Ax \times T to G, where G = Group(Ax)
-  Miyamoto_group; // The Miyamoto group on the axes
+  Miyamoto_group, // The Miyamoto group on the axes
+  tau_stabiliser; // The stabiliser of tau
 
 intrinsic Information(Ax::Axet) -> List
   {
@@ -228,7 +229,7 @@ intrinsic Core(Ax::Axet) -> Axet
   Q, quo := quo<Miy|ker>;
   
   Y := IndexedSet(X);
-  YxQ := CartesianProduct(Y, G);
+  YxQ := CartesianProduct(Y, Q);
   f := map< YxQ -> Y | y :-> Image(y[2]@@quo, X, y[1])>;
   Y := GSet(Q, Y, f);
   
@@ -245,6 +246,7 @@ function GSetEq(X1, X2)
   return X1 eq X2 and ActionImage(Group(X1), X1) eq ActionImage(Group(X2), X2);
 end function;
 
+// Can improve this by using TauMapEq if it is slow
 function MapEq(f, g)
   return Domain(f) eq Domain(g) and [ i@f : i in Domain(f)] eq [ i@g : i in Domain(g)];
 end function;
@@ -425,6 +427,10 @@ intrinsic IsTauMap(X::GSet, T::GrpPerm, tau::Map: faithful:=true, image:=Group(X
   end if;
 end intrinsic;
 
+TauMapEq := function(orb_reps, T, f, g)
+  return forall{i: i in orb_reps, t in FewGenerators(T) | <i,t>@f eq <i,t>@g};
+end function;
+  
 intrinsic TauAction(X::GSet, tau_maps::SetIndx) -> GSet
   {
   Given a GSet X and a set of tau-maps on X, find the induced action on the tau maps.
@@ -466,13 +472,9 @@ intrinsic TauAction(X::GSet, tau_maps::SetIndx) -> GSet
     end if;
   end for;
   all_tau_maps := IndexedSet(all_tau_maps);
-  
-  TauMapEq := function(f, g)
-    return forall{i: i in orb_reps, t in Generators(T) | <i,t>@f eq <i,t>@g};
-  end function;
 
   tau_return := function(f)
-    assert exists(g){g : g in all_tau_maps | TauMapEq(f,g)};
+    assert exists(g){g : g in all_tau_maps | TauMapEq(orb_reps, T, f,g)};
     return g;
   end function;
 
@@ -481,6 +483,24 @@ intrinsic TauAction(X::GSet, tau_maps::SetIndx) -> GSet
   Taus := GSet(N, all_tau_maps, f);
   
   return Taus;
+end intrinsic;
+
+intrinsic StabiliserOfTauMap(Ax::Axet: force_recompute:=false) -> GrpPerm
+  {
+  Returns the stabiliser of the tau-map.
+  }
+  if not assigned Ax`tau_stabiliser or force_recompute then
+    T := TGroup(Ax);
+    orb_reps := {@ Representative(o) : o in Orbits(Group(Ax), Axes(Ax)) @};
+    
+    Taus := TauAction(Axes(Ax), {@Tau(Ax)@});
+    
+    // There isn't equality for maps, so we must identify the map in Taus which is equal!
+    assert exists(t){ t : t in Taus | TauMapEq(orb_reps, T, Tau(Ax), t)};
+    Ax`tau_stabiliser := Stabiliser(Group(Taus), Taus, t);
+  end if;
+  
+  return Ax`tau_stabiliser;
 end intrinsic;
 
 intrinsic TauMaps(X::GSet, T::GrpPerm: faithful := true, image := Group(X)) -> SeqEnum
