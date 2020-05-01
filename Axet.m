@@ -159,7 +159,7 @@ end intrinsic;
 ======= Create new GSets and axets from old ones =======
 
 */
-intrinsic 'join'(X1::GSet, X2::GSet) -> GSet
+intrinsic Union(X1::GSet, X2::GSet) -> GSet
   {
   For two GSets X1 and X2 with the same action group, returns their union.
   }
@@ -171,13 +171,13 @@ intrinsic 'join'(X1::GSet, X2::GSet) -> GSet
   return GSet(G, X, f);
 end intrinsic;
 
-intrinsic 'join'(Ax1::Axet, Ax2::Axet) -> Axet
+intrinsic Union(Ax1::Axet, Ax2::Axet) -> Axet
   {
   For two axets with the same action group and same T group, returns their union.
   }
   T := Component(Domain(Tau(Ax1)), 2);
   require T eq Component(Domain(Tau(Ax2)), 2): "The two tau-maps do not have the same T group.";
-  X := Axes(Ax1) join Axes(Ax2);
+  X := Union(Axes(Ax1), Axes(Ax2));
   n := #Axes(Ax1);
   
   XxT := CartesianProduct(X, T);
