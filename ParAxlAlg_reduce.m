@@ -20,7 +20,7 @@ Check to see if Dim(V) = Dim(W) and if not goto (1) and repeat.
 There is a dimension limit where if W exceeds this then it won't be expanded further the procedure exits
 
 */
-intrinsic AxialReduce(A::ParAxlAlg: dimension_limit := 150, backtrack := false, stabiliser_action := true, reduction_limit:= func<A | Maximum(Floor(Dimension(A)/4), 50)>) -> ParAxlAlg, BoolElt
+intrinsic AxialReduce(A::ParAxlAlg: dimension_limit := 150, backtrack := false, stabiliser_action := false, reduction_limit:= func<A | Maximum(Floor(Dimension(A)/4), 50)>) -> ParAxlAlg, BoolElt
   {
   Performs ExpandEven and ExpandSpace repeatedly until either we have completed, or the dimension limit has been reached.
   }
@@ -91,7 +91,7 @@ end intrinsic;
 We provide a function to do all shapes for a given group
 
 */
-intrinsic ShapeReduce(G::Grp: saves:=true, starting_position := 1, fusion_table := MonsterFusionTable(), field := Rationals(), subgroups := "maximal", partial := false, shape_stabiliser := true, dimension_limit := 150, backtrack := false, stabiliser_action := true, reduction_limit:= func<A | Maximum(Floor(Dimension(A)/4), 50)>) -> SeqEnum
+intrinsic ShapeReduce(G::Grp: saves:=true, starting_position := 1, fusion_table := MonsterFusionTable(), field := Rationals(), subgroups := "maximal", partial := false, shape_stabiliser := true, dimension_limit := 150, backtrack := false, stabiliser_action := false, reduction_limit:= func<A | Maximum(Floor(Dimension(A)/4), 50)>) -> SeqEnum
   {
   Given a group G, find all the shapes, build the partial algebras and reduce.
   }
@@ -492,7 +492,7 @@ ijpos := function(i,j,n)
   end if;
 end function;
 
-intrinsic ExpandSpace(A::ParAxlAlg: implement := true, stabiliser_action := true) -> ParAxlAlg, Map
+intrinsic ExpandSpace(A::ParAxlAlg: implement := true, stabiliser_action := false) -> ParAxlAlg, Map
   {
   Let A = V \oplus C.  This function expands A to S^2(C) \oplus (V \otimes C) \oplus A, with the new V being the old A.  We then factor out by the known multiplications in old V and return the new partial axial algebra.
   }

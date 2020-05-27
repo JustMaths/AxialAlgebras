@@ -44,7 +44,7 @@ end intrinsic;
 Build an initial partial algebra
 
 */
-intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_table := MonsterFusionTable(), field := QQ, subgroups := "maximal", partial := false, shape_stabiliser := true) -> ParAxlAlg
+intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_table := MonsterFusionTable(), field := QQ, subgroups := "maximal", partial := false, shape_stabiliser := true, stabiliser_action:=false) -> ParAxlAlg
   {
   Given a GSet Ax for a group G, a map tau: Ax -> involutions of G and a shape for the partial algebra, we define an initial object.  shape should be given as a sequence of tuples <o, type>, where the axes o[1] and o[2] generate a subalgebra of the given type with axes o.
   
@@ -53,6 +53,7 @@ intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_tab
   subgroups toggles which subalgebras to glue in.  If "maximal" (default) then it checks for subalgebra coming from maximal subgroups, if "all" if check for subalgebras coming from all subgroups, if "none" it just uses the subalgebras in the shape, or the user can specify a sequence of subgroups of the Miyamoto group.
   field defaults to the rationals.
   shape_stabiliser is a Boolean and if true extends the action to the stabiliser of the shape.
+  stabiliser_action is a Boolean and if true performs the wh-w trick (NB this assumes a property weaker than primitivity).
   }
   require Type(fusion_table) eq FusTab: "The fusion table given is not in the required form.";
   require IsField(field): "The field given is not a field!";
@@ -213,19 +214,21 @@ intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_tab
   A`rels := {@ @};
   PullbackEigenvaluesAndRelations(New(ParAxlAlg), ~A: force_all:=true);
   
-  // We force the grading and do the wh-w trick as we assume this has been done before an expansion
+  // We force the grading as we assume this has been done before an expansion
   A := ForceGrading(A);
   
-  max_size := Max([#S : S in Keys(A`axes[1]`even)]);
-  assert exists(evens){S : S in Keys(A`axes[1]`even) | #S eq max_size};
-  
-  for i in [1..#A`axes] do
-    actionhom := GModuleAction(A`Wmod);
-    Hmat := [ h@actionhom - IdentityMatrix(field, #Ax) : h in A`axes[i]`stab | h ne G!1];
+  if stabiliser_action then
+    max_size := Max([#S : S in Keys(A`axes[1]`even)]);
+    assert exists(evens){S : S in Keys(A`axes[1]`even) | #S eq max_size};
     
-    prods := [ FastMatrix({@ w : w in Basis(A`axes[i]`even[evens])@}, h) : h in Hmat];
-    A`axes[i]`even[evens diff {@1@}] +:= sub< W | &join prods >;
-  end for;
+    for i in [1..#A`axes] do
+      actionhom := GModuleAction(A`Wmod);
+      Hmat := [ h@actionhom - IdentityMatrix(field, #Ax) : h in A`axes[i]`stab | h ne G!1];
+      
+      prods := [ FastMatrix({@ w : w in Basis(A`axes[i]`even[evens])@}, h) : h in Hmat];
+      A`axes[i]`even[evens diff {@1@}] +:= sub< W | &join prods >;
+    end for;
+  end if;
   
   return A;
 end intrinsic;
