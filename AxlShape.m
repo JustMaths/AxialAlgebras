@@ -336,21 +336,21 @@ end intrinsic;
 ======= Shapes =======
 
 */
-intrinsic DominatingVertices(Gr::GrphDir) -> IndxSet
+intrinsic DominatingVertices(Gr::GrphDir) -> SetIndx
   {
   The set of vertices v in our graph that are either sources, or if there is an in edge w -> v from another vertex w there is also an edge v -> w.
   }
   return {@ v : v in Vertices(Gr) | InNeighbours(v) subset OutNeighbours(v) @};
 end intrinsic;
 
-intrinsic Sinks(Gr::GrphDir) -> IndxSet
+intrinsic Sinks(Gr::GrphDir) -> SetIndx
   {
   The set of sinks of the directed graph.
   }
   return {@ v : v in Vertices(Gr) | OutDegree(v) eq 0 @};
 end intrinsic;
 
-intrinsic WeaklyConnectedComponents(Gr::GrphDir) -> IndxSet
+intrinsic WeaklyConnectedComponents(Gr::GrphDir) -> SetIndx
   {
   Returns the weakly connected components of a directed graph.
   }
@@ -366,7 +366,7 @@ function InterpretShape(sh)
   return StringToInteger(S[1]), S[2];
 end function;
 
-intrinsic Shapes(Ax::Axet, FL::FusLaw) -> IndxSet
+intrinsic Shapes(Ax::Axet, FL::FusLaw) -> SetIndx
   {
   Returns the set of shapes for the axet Ax.
   }
@@ -496,7 +496,8 @@ intrinsic Shapes(Ax::Axet, FL::FusLaw) -> IndxSet
   // We also need the set of axes for each one.
   // NB our ordering is based on the first in the orbit of the connected component, but the action of Dstab is based on the ordering in dom_verts
   
-  dom_to_order := Sym(#D)!Flat([ P[conjs[i,1]]^conjs[i,2] : i in [1..#comps]]); 
+  // We use this for permuting indices and that acts with an inverse - CHECK!!
+  dom_to_order := (Sym(#D)!Flat([ P[conjs[i,1]]^conjs[i,2] : i in [1..#comps]]))^-1;
   
   axes := [ t[2] : t in comp, comp in comp_dom_verts ];
   axes := PermuteSequence(axes, dom_to_order);
@@ -522,7 +523,7 @@ intrinsic Shapes(Ax::Axet, FL::FusLaw) -> IndxSet
   return {@ Shape(Ax, FL, {@ <axes[i], r[i]> : i in [1..#D] @}) : r in orb_reps @};
 end intrinsic;
 
-intrinsic MonsterShapes(G::GrpPerm) -> IndxSet
+intrinsic MonsterShapes(G::GrpPerm) -> SetIndx
   {
   Builds all possible faithful actions of G on unions of involutions, all tau-maps on these where the Miyamoto group is G and return all shapes on these.
   }
