@@ -7,6 +7,10 @@
   {
     +FusionLaw.spec
   }
+  DecomposedGModules
+  {
+    +GModDec.spec
+  }
   Axet.m
   AxlShape.m
 }

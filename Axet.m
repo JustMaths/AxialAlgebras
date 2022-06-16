@@ -132,7 +132,7 @@ intrinsic InvolutionGSets(G::GrpPerm) -> SeqEnum
     Ax := IndexedSet([1..#idems]);
     tau := map<Ax -> G | i :-> idems[i]>;
     AxxG := CartesianProduct(Ax, G);
-    f := map< AxxG -> Ax | y :-> Position(idems,((y[1] @ tau)^y[2]))>;
+    f := map< AxxG -> Ax | y :-> Position(idems,(y[1] @ tau)^y[2])>;
     Ax := GSet(G, Ax, f);
     if IsTrivial(ActionKernel(G,Ax)) then
       Include(~all_GSets, Ax);

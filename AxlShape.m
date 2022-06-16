@@ -12,6 +12,8 @@ declare attributes AxlShape:
   fusion_law,     // A FusLaw
   shape;          // Shape given as a sequence of tuples <S, type>, where S is a subset of axes and type is the type of 2-generated subgroup glued in on those axes
 
+// NB fix `shape being a SeqEnum or an SetIndx - it is currently both!!
+
 import "Axet.m": GSetEq, MapEq;
 
 intrinsic Information(Sh::AxlShape) -> List
@@ -27,6 +29,45 @@ intrinsic Print(Sh::AxlShape)
   }
   info := Information(Sh);
   printf "Shape for the group %o, on %o axes, of shape %o", info[1], info[2], info[3];
+end intrinsic;
+
+intrinsic ShapeName(Sh::AxlShape: latex:=false, separator := " \\, ") -> MonStgElt, SeqEnum
+  {
+  Returns the name of the shape, one dominating subalgebra for each connected component of the shape graph.  Currently only works for the Monster fusion law.
+  }
+  require FusionLaw(Sh) eq MonsterFusionLaw():" This function is currently implemented only the Monster fusion law.";
+  Gr, Gr_v, Gr_e := ShapeGraph(Sh);
+  Grvert_to_pos := func<v | Position(Vertices(Gr),v)>;
+  Grvert_to_set := func<v | Support(Gr)[v@Grvert_to_pos]>;
+  
+  comps := WeaklyConnectedComponents(Gr);
+  comp_verts := [ Vertices(c) : c in comps];
+  shape := Shape(Sh);
+  
+  G := Group(Sh);
+  X := Axes(Sh);
+  
+  text := [];
+  comp_flag := [ false : c in comps];
+  while #shape ne 0 do
+    t := shape[1];
+    assert exists(i){i : v in comp_verts[i], i in [1..#comps] | IsConjugate(G, X, t[1][1..2], v@Grvert_to_set)};
+    if not comp_flag[i] then
+      // We have not yet recorded this component
+      Append(~text, t[2]);
+      comp_flag[i] := true;
+    end if;
+    shape := shape[2..#shape];
+  end while;
+  
+  assert not false in comp_flag;
+  assert #text eq #comps;
+  
+  if latex then
+    return "$" cat Join([ t[1] cat "\\" cat t[2] : t in text], separator) cat "$";
+  else
+    return &cat text;
+  end if;
 end intrinsic;
 
 // Do I even need this??
@@ -293,12 +334,39 @@ intrinsic IsIsomorphic(Sh1::AxlShape, Sh2::AxlShape) -> BoolElt, GrpPermElt, Map
 end intrinsic;
 /*
 
-======= Shapes =======
+======= Shape graph =======
 
 */
 function SubalgebraOrb(Ax, S)
   D := sub<MiyamotoGroup(Ax) | [AxisSubgroup(Ax, x) : x in S]>;
   return OrbitClosure(D, Axes(Ax), S);
+end function;
+
+// We want to have fixed representatives for the pairs
+function PairRepresentatives(G, X)
+  orbs := Orbits(G, X);
+  orb_reps := {@o[1] : o in orbs@};
+
+  pairs := GSet(G, X, { {@i,j@} : i,j in X | i ne j});
+  pair_orbs := Orbits(G, pairs);
+  // pairs will automatically be sorted wrt X
+
+  pair_orb_reps := [];
+  for o in pair_orbs do
+    oo := {@ p : p in o | p[1] in orb_reps or p[2] in orb_reps @};
+    assert not IsEmpty(oo);
+    classes := (&join oo) meet orb_reps;
+    oo := {@ p : p in oo | classes[1] in p @};
+    assert not IsEmpty(oo);
+    if exists(p){ p : p in oo | p eq classes} then
+      Append(~pair_orb_reps, p);
+    else
+      Sort(~oo, func<x,y| Position(X, (x diff {@classes[1]@})[1]) -Position(X, (y diff {@classes[1]@})[1])>);
+      Append(~pair_orb_reps, oo[1]);
+    end if;
+  end for;
+  
+  return pair_orb_reps;
 end function;
 
 intrinsic ShapeGraph(Ax::Axet) -> GrphDir, GrphVertSet, GrphEdgeSet
@@ -308,9 +376,7 @@ intrinsic ShapeGraph(Ax::Axet) -> GrphDir, GrphVertSet, GrphEdgeSet
   G := Group(Ax);
   X := Axes(Ax);
   
-  pairs := GSet(G,X,{ {@i,j@} : i,j in X | i ne j});
-  pairs_orb_reps := OrbitRepresentatives(ActionImage(G, pairs));
-  verts := [ o[2] : o in pairs_orb_reps ];
+  verts := PairRepresentatives(G, X);
   
   // Now we need to find the domination edges
   edges := [];
@@ -329,16 +395,12 @@ intrinsic ShapeGraph(Ax::Axet) -> GrphDir, GrphVertSet, GrphEdgeSet
     edges cat:= [ [ verts[i], o] : o in subsets];
   end for;
   
-  return Digraph< Set(verts) | edges>;  
+  return Digraph< Set(verts) | edges>;
 end intrinsic;
-/*
 
-======= Shapes =======
-
-*/
 intrinsic DominatingVertices(Gr::GrphDir) -> SetIndx
   {
-  The set of vertices v in our graph that are either sources, or if there is an in edge w -> v from another vertex w there is also an edge v -> w.
+  The set of vertices v in our graph that are either sources, or if there is an in-edge w -> v from another vertex w there is also an edge v -> w.
   }
   return {@ v : v in Vertices(Gr) | InNeighbours(v) subset OutNeighbours(v) @};
 end intrinsic;
@@ -359,7 +421,11 @@ intrinsic WeaklyConnectedComponents(Gr::GrphDir) -> SetIndx
   
   return [ sub<Gr | ChangeUniverse(comp, Gr_verts) > : comp in Components(UnGr)];
 end intrinsic;
+/*
 
+======= Shapes =======
+
+*/
 function InterpretShape(sh)
   so, exp, S := Regexp("([0-9]+)(.+)", sh);
   assert so and exp eq sh;
