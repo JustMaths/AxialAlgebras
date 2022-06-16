@@ -56,7 +56,7 @@ intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_tab
   stabiliser_action is a Boolean and if true performs the wh-w trick (NB this assumes a property weaker than primitivity).
   }
   require Type(fusion_table) eq FusTab: "The fusion table given is not in the required form.";
-  require IsField(field): "The field given is not a field!";
+  //require IsField(field): "The field given is not a field!";
     
   A := New(ParAxlAlg);
   

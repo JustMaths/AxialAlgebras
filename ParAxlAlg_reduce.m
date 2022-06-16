@@ -665,7 +665,7 @@ intrinsic ExpandSpace(A::ParAxlAlg: implement := true, stabiliser_action := fals
     even_poss := [ basmult[t[1], t[2]] : t in even_poss_pairs];
 
     for j in [1..#even_poss_pairs] do
-      if IsIndependent(even cat even_poss[j]) then
+      if IsIndependent(even cat [even_poss[j]]) then
         Append(~even, even_poss[j]);
         Append(~even_pairs, even_poss_pairs[j]);
       end if;
@@ -1108,7 +1108,7 @@ intrinsic ExpandEven(A::ParAxlAlg: implement:=true, backtrack := false, reductio
       i, stage := Explode(tup);
       
       // Check if we are backtracking and we already have an intersection with V
-      // If so, then we want to skip to propogating relations and exit
+      // If so, then we want to skip to propagating relations and exit
       if backtrack and exists{i : i in [1..#A`axes] | Dimension(A`axes[i]`even[{}] meet A`V) ne 0} then
         // NB we do not make the subspace G-invariant.  It is quicker to pull back the intersection and do that in the previous (unexpanded) algebra.
         A`rels join:= &join{@ IndexedSet(Basis(A`axes[i]`even[{}])) : i in [1..#A`axes]@};
@@ -1139,7 +1139,7 @@ intrinsic ExpandEven(A::ParAxlAlg: implement:=true, backtrack := false, reductio
       // So we only need to make the relations subspace G-invariant and add that on
       elif stage eq 5 then
         tt := Cputime();
-        vprint ParAxlAlg, 2: "  Making the relations stabiliser-invariant and propogating.";
+        vprint ParAxlAlg, 2: "  Making the relations stabiliser-invariant and propagating.";
         orig := CheckEigenspaceDimensions(A: empty := true);
         
         // Check that it has changed

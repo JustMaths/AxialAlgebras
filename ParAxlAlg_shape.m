@@ -498,8 +498,15 @@ intrinsic IsIsomorphic(Ax1::GSet, tau1::Map, shape1::SeqEnum, Ax2::GSet, tau2::M
   // Now we check to see if the shapes are the same
   
   // we can act with all the stabiliser of the tau-map
+  
+  Taus := TauAction(Ax2, {@ tau2 @});
+  assert exists(taus2){ t : t in Taus | MapEq(t,tau2)};
+  stab := Stabiliser(Group(Taus), Taus, taus2);
+  
+  /*
   stab := sub<N |{m : m in N | MapEq(tau2, map<Ax2 -> Group(Ax2) |
                         i:-> (((i^(m^-1))@tau2@act2)^m)@@act2>)}>;
+  */
   shape_orbs2 := [ Orbit(Miy2, Ax2, sh[1]) : sh in shape2 ];
   
   orbmember := function(S);

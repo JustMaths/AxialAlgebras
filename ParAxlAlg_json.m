@@ -141,7 +141,7 @@ intrinsic Filename(A::ParAxlAlg) -> MonStgElt
       if not so then
         // We must choose an i which doesn't conflict with those already there
         conflicts := {@ a : a in algs | a[1..#shapetype] eq shapetype @};
-        eyes := { a[#shapetype+2] : a in conflicts };
+        eyes := { StringToInteger(a[#shapetype+2]) : a in conflicts };
         i := Min({1..#eyes+1} diff eyes);
       end if;
     end if;
@@ -446,7 +446,7 @@ intrinsic GetTypePartialAxialAlgebra(filename::MonStgElt) -> Tup
   end if;
 
   // If the file is small, then we assume it is for an algebra of dimension 0 and open it all.  Otherwise, we just open a the first few lines
-  if Size(filename) le 3000 then
+  if Size(filename) le 12000 then
     A := LoadPartialAxialAlgebra(filename);
     return <BaseRing(A), A`GSet, A`tau, A`shape, Dimension(A)>;
   end if;
