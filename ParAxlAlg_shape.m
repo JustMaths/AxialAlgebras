@@ -118,6 +118,7 @@ end intrinsic;
 Is a tau map admissible?  This may not be true when we restrict to a suborbit...
 
 */
+// Error in this! With Q2(1/3, 2/3).  Maybe with isolated axes.
 intrinsic IsAdmissibleTauMap(Ax::GSet, tau::Map) -> BoolElt
   {
   returns whether a tau-map is admissible or not.

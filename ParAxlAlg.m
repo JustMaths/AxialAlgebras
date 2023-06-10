@@ -67,11 +67,12 @@ intrinsic Hash(T::List) -> RngIntElt
   }
   return 1;
 end intrinsic;
+
 intrinsic 'eq'(A::Assoc, B::Assoc) -> BoolElt
   {
   Equality for AssociativeArrays.
   }
-  return (Universe(A) cmpeq Universe(B)) and (Keys(A) eq Keys(B)) and forall{ k : k in Keys(A) | A[k] cmpeq B[k] };
+  return IsNull(Keys(A)) eq IsNull(Keys(B)) and Keys(A) eq Keys(B) and forall{ k : k in Keys(A) | A[k] cmpeq B[k] };
 end intrinsic;
 //
 //
