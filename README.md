@@ -2,9 +2,7 @@
 
 This is a magma package for constructing axial algebra with a given Miyamoto group.  It implements the algorithm described in the paper
 
-J. McInroy and S. Shpectorov, An expansion algorithm for constructing axial algebras, J. Algebra, 550 (2020), 379-409.
-
-https://doi.org/10.1016/j.jalgebra.2019.12.018
+[J. McInroy and S. Shpectorov, An expansion algorithm for constructing axial algebras, J. Algebra, 550 (2020), 379-409.](https://doi.org/10.1016/j.jalgebra.2019.12.018)
 
 ## Getting started
 
