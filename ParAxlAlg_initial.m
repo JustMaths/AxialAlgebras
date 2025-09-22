@@ -44,7 +44,7 @@ end intrinsic;
 Build an initial partial algebra
 
 */
-intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_table := MonsterFusionTable(), field := QQ, subgroups := "maximal", partial := false, shape_stabiliser := true, stabiliser_action:=false) -> ParAxlAlg
+intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_table := MonsterFusionTable(), field := QQ, subgroups := "maximal", partial := false, shape_stabiliser := true, stabiliser_action:=false, algebras := false) -> ParAxlAlg
   {
   Given a GSet Ax for a group G, a map tau: Ax -> involutions of G and a shape for the partial algebra, we define an initial object.  shape should be given as a sequence of tuples <o, type>, where the axes o[1] and o[2] generate a subalgebra of the given type with axes o.
   
@@ -54,6 +54,7 @@ intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_tab
   field defaults to the rationals.
   shape_stabiliser is a Boolean and if true extends the action to the stabiliser of the shape.
   stabiliser_action is a Boolean and if true performs the wh-w trick (NB this assumes a property weaker than primitivity).
+  algebras is an experimental optional argument to give a sequence of 2-generated subalgebras corresponding to the shape sequence.  This allows easy construction for generalised Monster type algebras.  Defaults to false, in which case these will be calculated from the shape.
   }
   require Type(fusion_table) eq FusTab: "The fusion table given is not in the required form.";
   //require IsField(field): "The field given is not a field!";
@@ -97,6 +98,11 @@ intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_tab
 
   shape_flags := [ false : sh in shape ];
   
+  if Type(algebras) ne BoolElt then
+    require Type(algebras) in {SeqEnum, SetIndx} and #algebras eq #shape: "You need to provide one 2-generated algebra for each algebra in the shape";
+    subgroups := "none";
+  end if;
+
   // We search for the subalgebras we have computed and glue them in.
 
   if not (Type(subgroups) eq MonStgElt and subgroups eq "none") then
@@ -159,11 +165,18 @@ intrinsic PartialAxialAlgebra(Ax::GSetIndx, tau::Map, shape::SeqEnum: fusion_tab
     subsp := RSpaceWithBasis([ A`W.i : i in orb]);
     subalgs`subsps cat:= [* subsp *];
 
-    path := Sprintf("%o/%o/%m/basic_algebras", library_location, fusion_table`directory, BaseRing(A));
-    if ExistsPath(path) and Sprintf("%o.json", type) in ls(path) then
-      alg := LoadPartialAxialAlgebra(Sprintf("%o/%o", path, type));
+    // Get the subalgebra
+    if Type(algebras) eq BoolElt then
+      path := Sprintf("%o/%o/%m/basic_algebras", library_location, fusion_table`directory, BaseRing(A));
+      // load from the library
+      if ExistsPath(path) and Sprintf("%o.json", type) in ls(path) then
+        alg := LoadPartialAxialAlgebra(Sprintf("%o/%o", path, type));
+      else
+        alg := ChangeField(LoadPartialAxialAlgebra(Sprintf("%o/%o/RationalField()/basic_algebras/%o", library_location, fusion_table`directory, type)), field);
+      end if;
     else
-      alg := ChangeField(LoadPartialAxialAlgebra(Sprintf("%o/%o/RationalField()/basic_algebras/%o", library_location, fusion_table`directory, type)), field);
+      // use the algebras in algebras
+      alg := algebras[i];
     end if;
     if alg in subalgs`algs then
       pos := Position(subalgs`algs, alg);
